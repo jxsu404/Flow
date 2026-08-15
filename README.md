@@ -60,6 +60,18 @@ Abre `http://localhost:3000`, entra con Google y prueba:
 
 La primera petición tras ~5 minutos idle puede tardar un poco: Neon Free se duerme y despierta solo.
 
+## Error 403 `access_denied` al entrar con Google
+
+Eso **no** es el redirect. Google rechaza el consentimiento (casi siempre por Testing + Calendar).
+
+1. [Google Auth Platform → Audience](https://console.cloud.google.com/auth/audience): el estado debe ser **Testing**. **No** publiques la app (sin verificación, Calendar se bloquea).
+2. En **Test users**, añade el Gmail con el que vas a entrar (aunque sea el dueño del proyecto). Guarda.
+3. [APIs y servicios → Biblioteca](https://console.cloud.google.com/apis/library/calendar-json.googleapis.com): activa **Google Calendar API**.
+4. [Data Access / Scopes](https://console.cloud.google.com/auth/scopes): añade  
+   `https://www.googleapis.com/auth/calendar.events`
+5. Espera 1–2 minutos. Prueba en una ventana de incógnito. En la pantalla de Google pulsa **Permitir** (incluye Calendar; no canceles).
+6. Si ya habías denegado el acceso: [apps con acceso a tu cuenta](https://myaccount.google.com/permissions) → quita Flow / el cliente OAuth → vuelve a entrar.
+
 ## Cuotas a tener en cuenta
 
 - **Gemini Flash:** límite diario/minuto del plan gratuito de AI Studio.
@@ -67,4 +79,4 @@ La primera petición tras ~5 minutos idle puede tardar un poco: Neon Free se due
 - **Vercel Hobby:** suficiente para un MVP personal.
 - **Google OAuth Testing:** hasta 100 testers.
 
-Si se acaba la cuota de Gemini, puedes cambiar el modelo en `src/lib/ai/flow-agent.ts` por otro Flash gratuito o, como fallback, Groq (también tiene API key gratis).
+Si se acaba la cuota de Gemini, puedes cambiar el modelo en `src/lib/ai/flow-agent.ts` por otro Flash gratuito (`gemini-flash-latest` o `gemini-3.5-flash-lite`) o, como fallback, Groq.
