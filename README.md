@@ -18,7 +18,7 @@ Todavía **no** agenda solo las tareas dentro de los huecos. Eso queda para desp
 
 - Next.js (App Router) + Auth.js + Google
 - Neon Postgres + Drizzle
-- Gemini 2.5 Flash (`GEMINI_API_KEY` de [Google AI Studio](https://aistudio.google.com))
+- Gemini 3.7 Flash (`GEMINI_API_KEY` de [Google AI Studio](https://aistudio.google.com))
 - Web Speech API (`es-CR`) + texto como fallback
 
 ## Arranque local ($0)

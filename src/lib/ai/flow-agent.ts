@@ -31,7 +31,7 @@ export function createFlowAgent(ctx: AgentContext) {
   });
 
   return new ToolLoopAgent({
-    model: googleProvider()("gemini-2.5-flash"),
+    model: googleProvider()("gemini-3.7-flash"),
     instructions: `Eres Flow, una app de organización personal en español (Costa Rica).
 Zona horaria del usuario: ${ctx.timeZone}.
 Ahora mismo es ${when}.
