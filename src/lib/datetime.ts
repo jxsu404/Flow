@@ -1,4 +1,5 @@
-import { fromZonedTime } from "date-fns-tz";
+import { addDays, getISODay } from "date-fns";
+import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
 
 export const DEFAULT_TIMEZONE = "America/Costa_Rica";
 
@@ -33,6 +34,16 @@ export const ISO_DAY_LABELS: Record<number, string> = {
   7: "Domingo",
 };
 
+export const ISO_DAY_ABBR: Record<number, string> = {
+  1: "Lun",
+  2: "Mar",
+  3: "Mié",
+  4: "Jue",
+  5: "Vie",
+  6: "Sáb",
+  7: "Dom",
+};
+
 export const ISO_DAY_SHORT: Record<number, string> = {
   1: "MO",
   2: "TU",
@@ -42,6 +53,18 @@ export const ISO_DAY_SHORT: Record<number, string> = {
   6: "SA",
   7: "SU",
 };
+
+export function weekDateRange(now: Date, timeZone: string): { start: Date; end: Date } {
+  const today = formatInTimeZone(now, timeZone, "yyyy-MM-dd");
+  const noon = fromZonedTime(`${today}T12:00:00`, timeZone);
+  const mondayNoon = addDays(noon, -(getISODay(noon) - 1));
+  const monday = formatInTimeZone(mondayNoon, timeZone, "yyyy-MM-dd");
+  const sunday = formatInTimeZone(addDays(mondayNoon, 6), timeZone, "yyyy-MM-dd");
+  return {
+    start: fromZonedTime(`${monday}T00:00:00`, timeZone),
+    end: fromZonedTime(`${sunday}T23:59:59`, timeZone),
+  };
+}
 
 export function parseDayOfWeek(value: string | number): number {
   if (typeof value === "number") {

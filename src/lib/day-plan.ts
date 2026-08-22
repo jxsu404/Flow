@@ -52,6 +52,86 @@ export type DayPlan = {
   segments: DaySegment[];
 };
 
+export type ScheduleSegment = {
+  type: "free" | "busy";
+  rangeLabel: string;
+  title: string;
+  kind?: string;
+  suggestionTitle?: string | null;
+  suggestionDue?: string | null;
+  startMin: number;
+  durationMin: number;
+};
+
+export type SchedulePart = {
+  part: string;
+  rangeLabel: string;
+  startMin: number;
+  durationMin: number;
+  segments: ScheduleSegment[];
+};
+
+export type ScheduleDay = {
+  date: string;
+  weekday: string;
+  heading: string;
+  isToday: boolean;
+  isPast: boolean;
+  summary: string;
+  parts: SchedulePart[];
+};
+
+function minutesFromAwake(date: Date, timeZone: string): number {
+  const [hours, minutes] = formatInTimeZone(date, timeZone, "HH:mm").split(":").map(Number);
+  return hours * 60 + minutes - 7 * 60;
+}
+
+export function toScheduleDays(plans: DayPlan[], today: string, timeZone: string): ScheduleDay[] {
+  const partsOrder = ["Mañana", "Tarde", "Noche"] as const;
+  return plans.map((plan) => {
+    const parts: SchedulePart[] = partsOrder
+      .map((part) => {
+        const segments = plan.segments
+          .filter((segment) => segment.partLabel === part)
+          .map((segment): ScheduleSegment => {
+            const startMin = Math.max(0, minutesFromAwake(segment.start, timeZone));
+            const endMin = Math.max(startMin, minutesFromAwake(segment.end, timeZone));
+            return {
+              type: segment.type,
+              rangeLabel: segment.rangeLabel,
+              title: segment.type === "free" ? "Libre" : segment.title,
+              kind: segment.type === "busy" ? segment.kind : undefined,
+              suggestionTitle: segment.type === "free" ? segment.suggestion?.title ?? null : null,
+              suggestionDue: segment.type === "free" ? segment.suggestion?.dueLabel ?? null : null,
+              startMin,
+              durationMin: Math.max(1, endMin - startMin),
+            };
+          });
+        if (segments.length === 0) return null;
+        const startMin = Math.min(...segments.map((s) => s.startMin));
+        const endMin = Math.max(...segments.map((s) => s.startMin + s.durationMin));
+        return {
+          part,
+          rangeLabel: `${String(Math.floor(startMin / 60) + 7).padStart(2, "0")}:${String(startMin % 60).padStart(2, "0")} – ${String(Math.floor(endMin / 60) + 7).padStart(2, "0")}:${String(endMin % 60).padStart(2, "0")}`,
+          startMin,
+          durationMin: endMin - startMin,
+          segments,
+        };
+      })
+      .filter((part): part is SchedulePart => part !== null);
+
+    return {
+      date: plan.date,
+      weekday: plan.weekday,
+      heading: plan.heading,
+      isToday: plan.isToday,
+      isPast: plan.date < today,
+      summary: plan.summary,
+      parts,
+    };
+  });
+}
+
 const DUPLICATE_MS = 2 * 60_000;
 
 function priorityRank(priority: Item["priority"]) {
@@ -173,18 +253,19 @@ function assignSuggestions(days: DayPlan[], items: Item[], timeZone: string, tod
 export function buildDayPlans(input: {
   from: Date;
   to: Date;
+  now?: Date;
   timeZone: string;
   classBlocks: Pick<ClassBlock, "title" | "dayOfWeek" | "startTime" | "endTime">[];
   items: Item[];
   calendarBusy: Interval[];
 }): DayPlan[] {
-  const today = formatInTimeZone(input.from, input.timeZone, "yyyy-MM-dd");
+  const now = input.now ?? input.from;
+  const today = formatInTimeZone(now, input.timeZone, "yyyy-MM-dd");
   const busy = dedupeOccupied([
     ...expandClassBlocks(input.classBlocks, input.from, input.to, input.timeZone),
     ...itemBusyIntervals(input.items),
     ...input.calendarBusy,
   ]);
-  const freeSlots = findFreeSlots(input);
 
   const days: DayPlan[] = [];
   for (const date of eachDateInZone(input.from, input.to, input.timeZone)) {
@@ -206,16 +287,26 @@ export function buildDayPlans(input: {
       }
     }
 
-    const free: DaySegment[] = freeSlots
-      .filter((slot) => slot.date === date)
-      .map((slot) => ({
-        type: "free" as const,
-        start: slot.start,
-        end: slot.end,
-        rangeLabel: slot.rangeLabel,
-        partLabel: slot.partLabel,
-        suggestion: null,
-      }));
+    const dayFrom =
+      date === today
+        ? now
+        : fromZonedTime(`${date}T00:00:00`, input.timeZone);
+    const dayTo = fromZonedTime(`${date}T23:59:59`, input.timeZone);
+    const free: DaySegment[] = findFreeSlots({
+      from: dayFrom,
+      to: dayTo,
+      timeZone: input.timeZone,
+      classBlocks: input.classBlocks,
+      items: input.items,
+      calendarBusy: input.calendarBusy,
+    }).map((slot) => ({
+      type: "free" as const,
+      start: slot.start,
+      end: slot.end,
+      rangeLabel: slot.rangeLabel,
+      partLabel: slot.partLabel,
+      suggestion: null,
+    }));
 
     const noon = fromZonedTime(`${date}T12:00:00`, input.timeZone);
     const isoDay = getISODay(noon);

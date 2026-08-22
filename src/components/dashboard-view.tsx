@@ -1,23 +1,12 @@
 import { formatInTimeZone } from "date-fns-tz";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { DeadlineRow } from "@/components/deadline-list";
+import { WeekSchedule } from "@/components/week-schedule";
 import type { Item } from "@/db/schema";
 import type { DashboardData } from "@/lib/dashboard";
 import type { DayPlan, DaySegment } from "@/lib/day-plan";
 import { cn } from "@/lib/utils";
-
-const typeLabel: Record<Item["type"], string> = {
-  task: "Tarea",
-  assignment: "Entrega",
-  exam: "Examen",
-  event: "Evento",
-};
-
-const priorityLabel: Record<Item["priority"], string> = {
-  high: "Alta",
-  medium: "Media",
-  low: "Baja",
-};
 
 const busyKindLabel: Record<string, string> = {
   class: "Clase",
@@ -39,10 +28,6 @@ function ItemRow({ item, timeZone }: { item: Item; timeZone: string }) {
       <div>
         <p className="font-medium leading-tight">{item.title}</p>
         <p className="mt-1 text-xs text-muted-foreground">{when}</p>
-      </div>
-      <div className="flex shrink-0 flex-col items-end gap-1">
-        <Badge variant="secondary">{typeLabel[item.type]}</Badge>
-        {item.priority === "high" ? <Badge>{priorityLabel[item.priority]}</Badge> : null}
       </div>
     </div>
   );
@@ -143,51 +128,28 @@ export function DashboardView({ data }: { data: DashboardData }) {
 
       <Card>
         <CardHeader>
-          <CardTitle>Qué hacer primero</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {data.priorities.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Sin prioridades todavía.</p>
-          ) : (
-            data.priorities.map((item) => (
-              <ItemRow key={item.id} item={item} timeZone={data.timeZone} />
-            ))
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
           <CardTitle>Entregas y exámenes</CardTitle>
+          <CardDescription>
+            Tareas, proyectos y exámenes con etiqueta de tipo y de urgencia.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {data.upcoming.length === 0 ? (
             <p className="text-sm text-muted-foreground">No hay entregas próximas.</p>
           ) : (
             data.upcoming.map((item) => (
-              <ItemRow key={item.id} item={item} timeZone={data.timeZone} />
+              <DeadlineRow
+                key={item.id}
+                item={item}
+                today={data.today}
+                timeZone={data.timeZone}
+              />
             ))
           )}
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Bloques de la semana</CardTitle>
-          <CardDescription>
-            Tiempo libre en bloques, no en minutos. De 22:00 a 07:00 cuenta como descanso.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-6">
-          {data.weekPlans.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No hay más días en el rango.</p>
-          ) : (
-            data.weekPlans.map((plan) => (
-              <DayTimeline key={plan.date} plan={plan} compact />
-            ))
-          )}
-        </CardContent>
-      </Card>
+      <WeekSchedule days={data.weekDays} />
 
       <Card className="lg:col-span-2">
         <CardHeader>
