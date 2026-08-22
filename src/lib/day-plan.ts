@@ -87,38 +87,37 @@ function minutesFromAwake(date: Date, timeZone: string): number {
 }
 
 export function toScheduleDays(plans: DayPlan[], today: string, timeZone: string): ScheduleDay[] {
-  const partsOrder = ["Mañana", "Tarde", "Noche"] as const;
+  const partsOrder = ["Mañana", "Tarde", "Noche"];
   return plans.map((plan) => {
-    const parts: SchedulePart[] = partsOrder
-      .map((part) => {
-        const segments = plan.segments
-          .filter((segment) => segment.partLabel === part)
-          .map((segment): ScheduleSegment => {
-            const startMin = Math.max(0, minutesFromAwake(segment.start, timeZone));
-            const endMin = Math.max(startMin, minutesFromAwake(segment.end, timeZone));
-            return {
-              type: segment.type,
-              rangeLabel: segment.rangeLabel,
-              title: segment.type === "free" ? "Libre" : segment.title,
-              kind: segment.type === "busy" ? segment.kind : undefined,
-              suggestionTitle: segment.type === "free" ? segment.suggestion?.title ?? null : null,
-              suggestionDue: segment.type === "free" ? segment.suggestion?.dueLabel ?? null : null,
-              startMin,
-              durationMin: Math.max(1, endMin - startMin),
-            };
-          });
-        if (segments.length === 0) return null;
-        const startMin = Math.min(...segments.map((s) => s.startMin));
-        const endMin = Math.max(...segments.map((s) => s.startMin + s.durationMin));
-        return {
-          part,
-          rangeLabel: `${String(Math.floor(startMin / 60) + 7).padStart(2, "0")}:${String(startMin % 60).padStart(2, "0")} – ${String(Math.floor(endMin / 60) + 7).padStart(2, "0")}:${String(endMin % 60).padStart(2, "0")}`,
-          startMin,
-          durationMin: endMin - startMin,
-          segments,
-        };
-      })
-      .filter((part): part is SchedulePart => part !== null);
+    const parts: SchedulePart[] = [];
+    for (const part of partsOrder) {
+      const segments = plan.segments
+        .filter((segment) => segment.partLabel === part)
+        .map((segment): ScheduleSegment => {
+          const startMin = Math.max(0, minutesFromAwake(segment.start, timeZone));
+          const endMin = Math.max(startMin, minutesFromAwake(segment.end, timeZone));
+          return {
+            type: segment.type,
+            rangeLabel: segment.rangeLabel,
+            title: segment.type === "free" ? "Libre" : segment.title,
+            kind: segment.type === "busy" ? segment.kind : undefined,
+            suggestionTitle: segment.type === "free" ? segment.suggestion?.title ?? null : null,
+            suggestionDue: segment.type === "free" ? segment.suggestion?.dueLabel ?? null : null,
+            startMin,
+            durationMin: Math.max(1, endMin - startMin),
+          };
+        });
+      if (segments.length === 0) continue;
+      const startMin = Math.min(...segments.map((s) => s.startMin));
+      const endMin = Math.max(...segments.map((s) => s.startMin + s.durationMin));
+      parts.push({
+        part,
+        rangeLabel: `${String(Math.floor(startMin / 60) + 7).padStart(2, "0")}:${String(startMin % 60).padStart(2, "0")} – ${String(Math.floor(endMin / 60) + 7).padStart(2, "0")}:${String(endMin % 60).padStart(2, "0")}`,
+        startMin,
+        durationMin: endMin - startMin,
+        segments,
+      });
+    }
 
     return {
       date: plan.date,
