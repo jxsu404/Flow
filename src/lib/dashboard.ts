@@ -3,9 +3,9 @@ import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
 import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { users, type ClassBlock, type Item } from "@/db/schema";
-import { findFreeSlots, type FreeSlot } from "./availability";
 import { listCalendarBusy } from "./calendar/google";
 import { listClassBlocks } from "./classes";
+import { buildDayPlans, type DayPlan } from "./day-plan";
 import { DEFAULT_TIMEZONE, ISO_DAY_LABELS } from "./datetime";
 import { isCalendarConnected } from "./google-token";
 import { listItems } from "./items";
@@ -19,7 +19,8 @@ export type DashboardData = {
   todayItems: Item[];
   priorities: Item[];
   upcoming: Item[];
-  freeSlots: FreeSlot[];
+  todayPlan: DayPlan | null;
+  weekPlans: DayPlan[];
 };
 
 function priorityRank(priority: Item["priority"]) {
@@ -75,14 +76,14 @@ export async function getDashboardData(userId: string): Promise<DashboardData> {
     .sort((a, b) => (a.dueAt?.getTime() ?? 0) - (b.dueAt?.getTime() ?? 0))
     .slice(0, 8);
 
-  const freeSlots = findFreeSlots({
+  const days = buildDayPlans({
     from: now,
     to: rangeEnd,
     timeZone,
     classBlocks: classes,
     items: pending,
     calendarBusy,
-  }).slice(0, 8);
+  });
 
   return {
     userName: user?.name ?? null,
@@ -93,6 +94,7 @@ export async function getDashboardData(userId: string): Promise<DashboardData> {
     todayItems,
     priorities,
     upcoming,
-    freeSlots,
+    todayPlan: days.find((day) => day.isToday) ?? days[0] ?? null,
+    weekPlans: days.filter((day) => !day.isToday).slice(0, 6),
   };
 }

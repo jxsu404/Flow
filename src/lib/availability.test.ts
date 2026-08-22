@@ -73,3 +73,45 @@ test("ignora huecos menores a 30 minutos", () => {
   );
   assert.equal(free.length, 0);
 });
+
+test("un sábado vacío se parte en bloques de mañana, tarde y noche, no en minutos", () => {
+  const dayStart = fromZonedTime("2026-08-22T00:00:00", TZ);
+  const dayEnd = fromZonedTime("2026-08-22T23:59:59", TZ);
+  const slots = findFreeSlots({
+    from: dayStart,
+    to: dayEnd,
+    timeZone: TZ,
+    classBlocks: [],
+    items: [],
+    calendarBusy: [],
+  });
+  assert.equal(slots.length, 3);
+  assert.deepEqual(
+    slots.map((s) => s.rangeLabel),
+    ["07:00 – 12:00", "12:00 – 18:00", "18:00 – 22:00"],
+  );
+  assert.ok(slots.every((s) => !s.label.includes("min")));
+  assert.equal(
+    slots.reduce((sum, s) => sum + s.minutes, 0),
+    15 * 60,
+  );
+});
+
+test("no cuenta como libre el horario de descanso (22:00–07:00)", () => {
+  const dayStart = fromZonedTime("2026-08-22T00:00:00", TZ);
+  const dayEnd = fromZonedTime("2026-08-22T23:59:59", TZ);
+  const slots = findFreeSlots({
+    from: dayStart,
+    to: dayEnd,
+    timeZone: TZ,
+    classBlocks: [],
+    items: [],
+    calendarBusy: [],
+  });
+  for (const slot of slots) {
+    const startHm = slot.rangeLabel.slice(0, 5);
+    const endHm = slot.rangeLabel.slice(-5);
+    assert.ok(startHm >= "07:00", `inicio ${startHm} no debería ser antes de las 07:00`);
+    assert.ok(endHm <= "22:00", `fin ${endHm} no debería ser después de las 22:00`);
+  }
+});

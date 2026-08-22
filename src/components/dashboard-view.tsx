@@ -1,8 +1,10 @@
 import { formatInTimeZone } from "date-fns-tz";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { Item } from "@/db/schema";
 import type { DashboardData } from "@/lib/dashboard";
+import type { DayPlan, DaySegment } from "@/lib/day-plan";
+import { cn } from "@/lib/utils";
 
 const typeLabel: Record<Item["type"], string> = {
   task: "Tarea",
@@ -15,6 +17,15 @@ const priorityLabel: Record<Item["priority"], string> = {
   high: "Alta",
   medium: "Media",
   low: "Baja",
+};
+
+const busyKindLabel: Record<string, string> = {
+  class: "Clase",
+  exam: "Examen",
+  event: "Evento",
+  calendar: "Calendar",
+  assignment: "Entrega",
+  task: "Tarea",
 };
 
 function ItemRow({ item, timeZone }: { item: Item; timeZone: string }) {
@@ -37,29 +48,96 @@ function ItemRow({ item, timeZone }: { item: Item; timeZone: string }) {
   );
 }
 
+function SegmentBlock({ segment }: { segment: DaySegment }) {
+  const isFree = segment.type === "free";
+  return (
+    <div
+      className={cn(
+        "rounded-lg px-3 py-2",
+        isFree
+          ? "border border-dashed border-border bg-muted/30"
+          : "bg-secondary",
+      )}
+    >
+      <div className="flex items-baseline justify-between gap-3">
+        <p className="font-medium leading-tight">
+          {isFree ? "Libre" : segment.title}
+        </p>
+        <p className="shrink-0 font-mono text-xs tabular-nums text-muted-foreground">
+          {segment.rangeLabel}
+        </p>
+      </div>
+      {isFree && segment.suggestion ? (
+        <p className="mt-1 text-xs text-muted-foreground">
+          Puedes {segment.suggestion.type === "assignment" ? "avanzar" : "hacer"}{" "}
+          {segment.suggestion.title} · {segment.suggestion.dueLabel}
+        </p>
+      ) : null}
+      {!isFree ? (
+        <p className="mt-1 text-xs text-muted-foreground">
+          {busyKindLabel[segment.kind] ?? segment.kind}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function DayTimeline({ plan, compact = false }: { plan: DayPlan; compact?: boolean }) {
+  const parts = ["Mañana", "Tarde", "Noche"] as const;
+  const grouped = parts
+    .map((part) => ({
+      part,
+      segments: plan.segments.filter((segment) => segment.partLabel === part),
+    }))
+    .filter((group) => group.segments.length > 0);
+
+  return (
+    <div className={cn("flex flex-col gap-3", compact && "gap-2")}>
+      <div>
+        <p className={cn("font-medium", compact ? "text-sm" : "text-base")}>{plan.heading}</p>
+        <p className="mt-0.5 text-xs text-muted-foreground">{plan.summary}</p>
+      </div>
+      {grouped.map((group) => (
+        <div key={group.part} className="flex flex-col gap-1.5">
+          <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+            {group.part}
+          </p>
+          {group.segments.map((segment) => (
+            <SegmentBlock
+              key={`${segment.type}-${segment.start.toISOString()}`}
+              segment={segment}
+            />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function DashboardView({ data }: { data: DashboardData }) {
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       <Card>
         <CardHeader>
           <CardTitle>Hoy · {data.todayLabel}</CardTitle>
+          <CardDescription>
+            Clases, Calendar y lo que ya tiene hora. El resto se sugiere en los bloques libres.
+          </CardDescription>
         </CardHeader>
-        <CardContent>
-          {data.todayClasses.length === 0 && data.todayItems.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Nada fijo para hoy. Usa la barra de comando.</p>
-          ) : null}
-          {data.todayClasses.map((block) => (
-            <div key={block.id} className="flex justify-between border-b border-border/50 py-3 text-sm last:border-0">
-              <span>
-                {block.title}
-                {block.location ? ` · ${block.location}` : ""}
-              </span>
-              <span className="text-muted-foreground">{block.when}</span>
+        <CardContent className="flex flex-col gap-4">
+          {data.todayPlan ? <DayTimeline plan={data.todayPlan} /> : (
+            <p className="text-sm text-muted-foreground">No pude armar el día de hoy.</p>
+          )}
+          {data.todayItems.length > 0 ? (
+            <div>
+              <p className="mb-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+                Vence o empieza hoy
+              </p>
+              {data.todayItems.map((item) => (
+                <ItemRow key={item.id} item={item} timeZone={data.timeZone} />
+              ))}
             </div>
-          ))}
-          {data.todayItems.map((item) => (
-            <ItemRow key={item.id} item={item} timeZone={data.timeZone} />
-          ))}
+          ) : null}
         </CardContent>
       </Card>
 
@@ -95,19 +173,17 @@ export function DashboardView({ data }: { data: DashboardData }) {
 
       <Card>
         <CardHeader>
-          <CardTitle>Tiempo libre</CardTitle>
+          <CardTitle>Bloques de la semana</CardTitle>
+          <CardDescription>
+            Tiempo libre en bloques, no en minutos. De 22:00 a 07:00 cuenta como descanso.
+          </CardDescription>
         </CardHeader>
-        <CardContent>
-          <p className="mb-3 text-xs text-muted-foreground">
-            Clases + Calendar + tareas con horario. Flow aún no agenda solo en estos huecos.
-          </p>
-          {data.freeSlots.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No encontré huecos de 30+ min en los próximos días.</p>
+        <CardContent className="flex flex-col gap-6">
+          {data.weekPlans.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No hay más días en el rango.</p>
           ) : (
-            data.freeSlots.map((slot) => (
-              <div key={slot.start.toISOString()} className="border-b border-border/50 py-2 text-sm last:border-0">
-                {slot.label}
-              </div>
+            data.weekPlans.map((plan) => (
+              <DayTimeline key={plan.date} plan={plan} compact />
             ))
           )}
         </CardContent>
