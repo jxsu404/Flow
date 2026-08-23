@@ -35,6 +35,7 @@ export type DashboardData = ScheduleData & {
   todayClasses: Array<ClassBlock & { when: string }>;
   todayItems: Item[];
   pendingItems: Item[];
+  items: Item[];
   upcoming: Item[];
   todayPlan: DayPlan | null;
 };
@@ -151,6 +152,7 @@ export async function getDashboardData(userId: string): Promise<DashboardData> {
     todayClasses,
     todayItems,
     pendingItems: pending,
+    items: allItems,
     upcoming,
     todayPlan: plans.find((day) => day.isToday) ?? plans[0] ?? null,
     weekDays: allDays.filter((day) => day.date >= weekStart && day.date <= weekEnd),

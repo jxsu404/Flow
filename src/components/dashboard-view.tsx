@@ -35,7 +35,7 @@ export function DashboardView({ data }: { data: DashboardData }) {
           </CardHeader>
           <CardContent>
             {data.todayPlan ? (
-              <TodayPanel timeZone={data.timeZone} items={data.pendingItems} busy={busy} />
+              <TodayPanel timeZone={data.timeZone} items={data.items} busy={busy} />
             ) : (
               <p className="text-sm text-muted-foreground">No pude armar el día de hoy.</p>
             )}

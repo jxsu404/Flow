@@ -71,18 +71,13 @@ export function TodayPanel({
         <div className="mt-3">
           <p className="text-sm font-medium leading-snug">{insight.subject.title}</p>
           <p className="mt-0.5 text-xs text-muted-foreground">{insight.subject.meta}</p>
+          <Button variant="ghost" size="sm" className="mt-3 h-8 px-0 text-primary" asChild>
+            <Link href={insight.subject.href}>
+              {insight.subject.cta}
+              <ChevronRight />
+            </Link>
+          </Button>
         </div>
-      ) : null}
-      {insight.detail ? (
-        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{insight.detail}</p>
-      ) : null}
-      {insight.subject ? (
-        <Button variant="ghost" size="sm" className="mt-3 h-8 px-0 text-primary" asChild>
-          <Link href={insight.subject.href}>
-            {insight.subject.cta}
-            <ChevronRight />
-          </Link>
-        </Button>
       ) : null}
     </div>
   );

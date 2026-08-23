@@ -1,7 +1,10 @@
+import { getISODay } from "date-fns";
 import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
 import type { Item } from "@/db/schema";
 import { DAY_PARTS, localInterval, type DayPartId } from "./availability";
 import { activityKind, dueCaption, urgencyForDue, type ActivityKind } from "./deadlines";
+import { ISO_DAY_LABELS } from "./datetime";
+import { composeTodayPhrase, type WeatherHint } from "./today-phrase";
 
 /** Minutes left before a deadline counts as “do it now”, not as a scare. */
 export const IMMINENT_MINUTES = 30;
@@ -72,9 +75,9 @@ type Candidate = {
 export const INSIGHT_PRIORITY: Record<InsightSituation, number> = {
   overdue: 10,
   imminent: 20,
-  exam_today: 30,
-  soon: 40,
-  due_today: 50,
+  soon: 30,
+  due_today: 40,
+  exam_today: 50,
   next_block: 60,
   busy: 70,
   later: 80,
@@ -136,20 +139,6 @@ function overlaps(block: InsightBusy, from: Date, to: Date): boolean {
   return start < to && end > from;
 }
 
-function joinNames(names: string[]): string {
-  const unique = [...new Set(names.filter(Boolean))];
-  if (unique.length <= 1) return unique[0] ?? "";
-  if (unique.length === 2) return `${unique[0]} y ${unique[1]}`;
-  return `${unique.slice(0, -1).join(", ")} y ${unique.at(-1)}`;
-}
-
-function sentences(...parts: Array<string | null | undefined | false>): string {
-  return parts
-    .map((part) => (typeof part === "string" ? part.trim() : ""))
-    .filter(Boolean)
-    .join(" ");
-}
-
 function itemClock(item: InsightItem): Date | null {
   return toDate(item.dueAt) ?? toDate(item.startAt);
 }
@@ -166,12 +155,6 @@ function ctaFor(kind: ActivityKind): string {
   if (kind === "examen") return "Ver examen";
   if (kind === "evento") return "Ver evento";
   return "Ver tarea";
-}
-
-function workWord(kind: ActivityKind): "examen" | "evento" | "entrega" {
-  if (kind === "examen") return "examen";
-  if (kind === "evento") return "evento";
-  return "entrega";
 }
 
 function subjectFromItem(item: InsightItem, today: string, timeZone: string): InsightSubject {
@@ -224,8 +207,8 @@ function situationForItem(
     const date = formatInTimeZone(due, timeZone, "yyyy-MM-dd");
     if (pressure === "overdue" || date < today) return { situation: "overdue", minutesLeft };
     if (pressure === "imminent") return { situation: "imminent", minutesLeft };
-    if (kind === "examen" && date === today) return { situation: "exam_today", minutesLeft };
     if (pressure === "soon") return { situation: "soon", minutesLeft };
+    if (kind === "examen" && date === today) return { situation: "exam_today", minutesLeft };
     if (date === today) return { situation: "due_today", minutesLeft };
     return { situation: "later", minutesLeft };
   }
@@ -253,11 +236,11 @@ function pickCandidate(candidates: Candidate[]): Candidate {
   })[0]!;
 }
 
-function overdueWhen(clock: Date, today: string, timeZone: string): string {
-  const date = formatInTimeZone(clock, timeZone, "yyyy-MM-dd");
-  const time = formatInTimeZone(clock, timeZone, "HH:mm");
-  if (date === today) return `hoy a las ${time}`;
-  return `el ${formatInTimeZone(clock, timeZone, "d MMM")} a las ${time}`;
+function situationTone(situation: InsightSituation): InsightTone {
+  if (situation === "overdue" || situation === "imminent") return "act";
+  if (situation === "busy") return "occupied";
+  if (situation === "free" || situation === "cleared") return "calm";
+  return "watch";
 }
 
 function compose(input: {
@@ -266,183 +249,49 @@ function compose(input: {
   block?: InsightBusy;
   today: string;
   timeZone: string;
+  now: Date;
   part: TodayPart;
   quietPart: boolean;
   partBusyTitles: string[];
+  remainingClassTitles: string[];
   hasLaterWork: boolean;
+  doneTodayCount: number;
+  pendingCount: number;
+  weather: WeatherHint | null;
 }): { tone: InsightTone; headline: string; detail: string; subject: InsightSubject | null } {
-  const { situation, item, block, today, timeZone, part, quietPart, partBusyTitles, hasLaterWork } = input;
-  const kind = item ? activityKind(item) : "entrega";
-  const work = workWord(kind);
+  const { situation, item, block, today, timeZone, now, part } = input;
   const clock = item ? itemClock(item) : toDate(block?.start);
-  const time = clock ? formatInTimeZone(clock, timeZone, "HH:mm") : "";
+  const timeLabel = clock ? formatInTimeZone(clock, timeZone, "HH:mm") : "";
   const title = item?.title ?? block?.title ?? "";
   const subject = item ? subjectFromItem(item, today, timeZone) : null;
-  const slot = part.label.toLowerCase();
-  const happening = joinNames(partBusyTitles);
+  const weekday = ISO_DAY_LABELS[getISODay(fromZonedTime(`${today}T12:00:00`, timeZone))] ?? "";
+  const hour = Number(formatInTimeZone(now, timeZone, "H"));
+  const minutesLeft = clock ? minutesUntil(now, clock) : null;
+  const phrase = composeTodayPhrase({
+    situation,
+    part,
+    weekday,
+    hour,
+    today,
+    title,
+    kind: item ? activityKind(item) : null,
+    timeLabel,
+    minutesLeft,
+    quietPart: input.quietPart,
+    partBusyTitles: input.partBusyTitles,
+    remainingClassTitles: input.remainingClassTitles,
+    hasLaterWork: input.hasLaterWork,
+    doneTodayCount: input.doneTodayCount,
+    pendingCount: input.pendingCount,
+    weather: input.weather,
+  });
 
-  switch (situation) {
-    case "overdue":
-      return {
-        tone: "act",
-        headline: work === "examen" ? "Tienes un examen vencido" : "Tienes una entrega vencida",
-        detail: clock
-          ? `${title} debía entregarse ${overdueWhen(clock, today, timeZone)} y todavía está pendiente.`
-          : `${title} ya venció y todavía está pendiente.`,
-        subject,
-      };
-    case "imminent":
-      return {
-        tone: "act",
-        headline: kind === "examen" ? "Tu examen es ahora" : "Deberías terminarla ahora",
-        detail: sentences(
-          part.phase === "windingDown" && "El día está terminando.",
-          kind === "examen" || kind === "evento"
-            ? `${title} es en menos de ${IMMINENT_MINUTES} minutos.`
-            : `${title} vence en menos de ${IMMINENT_MINUTES} minutos.`,
-        ),
-        subject,
-      };
-    case "soon":
-      return {
-        tone: "watch",
-        headline: kind === "examen" ? "Tu examen es pronto" : "No lo dejes para después",
-        detail: sentences(
-          part.id === "evening" && part.phase !== "early" && "Ya estás en la noche.",
-          time
-            ? `${title} ${kind === "examen" ? "es" : "vence"} hoy a las ${time}.`
-            : `${title} es hoy.`,
-        ),
-        subject,
-      };
-    case "exam_today":
-      return {
-        tone: "watch",
-        headline: "Tienes un examen hoy",
-        detail: time ? `${title} es hoy a las ${time}.` : `${title} es hoy.`,
-        subject,
-      };
-    case "due_today": {
-      if (part.phase === "windingDown") {
-        return {
-          tone: "watch",
-          headline: "El día está terminando",
-          detail: `${title} sigue pendiente.`,
-          subject,
-        };
-      }
-      if (part.phase === "early") {
-        return {
-          tone: "watch",
-          headline: "Tienes una entrega pendiente",
-          detail: "Todavía es de madrugada. Tienes una entrega pendiente para hoy.",
-          subject,
-        };
-      }
-      if (part.id === "evening") {
-        return {
-          tone: "watch",
-          headline: "Ya estás en la noche",
-          detail: title
-            ? `Si todavía tienes pendiente ${title}, este es un buen momento para dejarla terminada.`
-            : "Si todavía tienes una entrega pendiente, este es un buen momento para dejarla terminada.",
-          subject,
-        };
-      }
-      if (part.id === "afternoon") {
-        return {
-          tone: "watch",
-          headline: quietPart ? "Tu tarde está tranquila" : "Tienes una entrega pendiente",
-          detail: quietPart
-            ? `Es un buen momento para avanzar en ${title}.`
-            : `Esta tarde tienes ${happening || "actividades"} y ${title} sigue pendiente para hoy.`,
-          subject,
-        };
-      }
-      return {
-        tone: "watch",
-        headline: quietPart
-          ? `Empieza con ${title} antes de que se te acumule el día`
-          : "Tienes una entrega pendiente",
-        detail: quietPart ? "Tienes una entrega pendiente para hoy." : "Buenos días. Tienes una entrega pendiente para hoy.",
-        subject,
-      };
-    }
-    case "next_block":
-      return {
-        tone: "watch",
-        headline: isClassBlock(block ?? { title: "", start: "", end: "" })
-          ? "Tu clase empieza pronto"
-          : "Tienes algo en unos minutos",
-        detail: time ? `${title} empieza a las ${time}.` : `${title} empieza pronto.`,
-        subject: null,
-      };
-    case "busy":
-      return {
-        tone: "occupied",
-        headline: happening ? `Esta ${slot} tienes ${happening}` : `Tu ${slot} está ocupada`,
-        detail: hasLaterWork
-          ? "Todavía puedes encontrar un hueco para avanzar tus tareas."
-          : `Hoy tienes actividades en tu ${slot}.`,
-        subject: null,
-      };
-    case "later":
-      return {
-        tone: "watch",
-        headline: part.id === "morning" ? "Buenos días" : part.id === "afternoon" ? "Tu tarde está tranquila" : "Ya estás en la noche",
-        detail: title
-          ? `Hoy no vence nada. Lo más próximo es ${title}.`
-          : "Hoy no vence nada, pero tienes pendientes en los próximos días.",
-        subject,
-      };
-    case "cleared":
-      return {
-        tone: "calm",
-        headline: `El resto de tu ${slot} está tranquila`,
-        detail: "No te queda nada más en este periodo.",
-        subject: null,
-      };
-    case "free": {
-      if (part.phase === "early") {
-        return {
-          tone: "calm",
-          headline: "Todavía es de madrugada",
-          detail: "No tienes nada pendiente por ahora.",
-          subject: null,
-        };
-      }
-      if (part.phase === "windingDown") {
-        return {
-          tone: "calm",
-          headline: "El día está terminando",
-          detail: "No te queda nada pendiente.",
-          subject: null,
-        };
-      }
-      if (part.id === "morning") {
-        return {
-          tone: "calm",
-          headline: "Buenos días",
-          detail: "Tu mañana está bastante tranquila.",
-          subject: null,
-        };
-      }
-      if (part.id === "afternoon") {
-        return {
-          tone: "calm",
-          headline: "Tu tarde está tranquila",
-          detail: "No tienes tareas, clases ni eventos importantes en este momento.",
-          subject: null,
-        };
-      }
-      return {
-        tone: "calm",
-        headline: "Ya estás en la noche",
-        detail: "Tu noche está bastante tranquila.",
-        subject: null,
-      };
-    }
-  }
+  return {
+    tone: situationTone(situation),
+    headline: phrase,
+    detail: "",
+    subject,
+  };
 }
 
 export function interpretToday(input: {
@@ -450,6 +299,7 @@ export function interpretToday(input: {
   timeZone: string;
   items: InsightItem[];
   busy?: InsightBusy[];
+  weather?: WeatherHint | null;
 }): TodayInsight {
   const today = formatInTimeZone(input.now, input.timeZone, "yyyy-MM-dd");
   const part = resolveDayPart(input.now, input.timeZone);
@@ -462,8 +312,18 @@ export function interpretToday(input: {
   }));
   const inPart = busy.filter((block) => overlaps(block, window.start, window.end));
   const remainingInPart = remainingBusy(inPart, input.now);
+  const remainingClasses = remainingBusy(
+    busy.filter(isClassBlock),
+    input.now,
+  );
   const next = nextBlock(busy, input.now);
   const nextInPart = next && overlaps(next.block, window.start, window.end) ? next : null;
+  const doneTodayCount = input.items.filter((item) => {
+    if (item.status !== "done") return false;
+    const clock = itemClock(item);
+    if (!clock) return false;
+    return formatInTimeZone(clock, input.timeZone, "yyyy-MM-dd") === today;
+  }).length;
 
   const candidates: Candidate[] = [];
 
@@ -521,10 +381,15 @@ export function interpretToday(input: {
     block: chosen.block,
     today,
     timeZone: input.timeZone,
+    now: input.now,
     part,
     quietPart: remainingInPart.length === 0,
     partBusyTitles: remainingInPart.map((block) => block.title),
+    remainingClassTitles: remainingClasses.map((block) => block.title),
     hasLaterWork,
+    doneTodayCount,
+    pendingCount: pending.length,
+    weather: input.weather ?? null,
   });
 
   return {
