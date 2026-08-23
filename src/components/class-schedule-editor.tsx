@@ -2,9 +2,10 @@
 
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
-import { FileDown, ImageDown } from "lucide-react";
+import { FileDown, ImageDown, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { ScheduleExportSheet } from "@/components/schedule-export-sheet";
+import { ScheduleImportDialog } from "@/components/schedule-import-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -31,6 +32,7 @@ export function ClassScheduleEditor({ initial }: { initial: ClassBlock[] }) {
   const [location, setLocation] = useState("");
   const [pending, setPending] = useState(false);
   const [exporting, setExporting] = useState<"png" | "pdf" | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
   const exportRef = useRef<HTMLDivElement>(null);
   const blocks = [...initial].sort((a, b) => {
     if (a.dayOfWeek !== b.dayOfWeek) return a.dayOfWeek - b.dayOfWeek;
@@ -138,7 +140,16 @@ export function ClassScheduleEditor({ initial }: { initial: ClassBlock[] }) {
       <Card>
         <CardHeader>
           <CardTitle>Semana</CardTitle>
-          <CardAction className="flex gap-1">
+          <CardAction className="flex flex-wrap justify-end gap-1">
+            <Button
+              type="button"
+              size="sm"
+              aria-label="Importar horario"
+              onClick={() => setImportOpen(true)}
+            >
+              <Upload />
+              Importar horario
+            </Button>
             <Button
               type="button"
               variant="outline"
@@ -165,9 +176,15 @@ export function ClassScheduleEditor({ initial }: { initial: ClassBlock[] }) {
         </CardHeader>
         <CardContent>
           {blocks.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              Aún no hay clases. Agrégalas aquí o dilo por voz: “Lunes matemáticas de 8 a 10”.
-            </p>
+            <div className="flex flex-col gap-3">
+              <p className="text-sm text-muted-foreground">
+                Aún no hay clases. Agrégalas aquí, dilo por voz: “Lunes matemáticas de 8 a 10”, o sube una foto de tu horario.
+              </p>
+              <Button type="button" variant="outline" size="sm" className="self-start" onClick={() => setImportOpen(true)}>
+                <Upload />
+                Importar horario
+              </Button>
+            </div>
           ) : (
             blocks.map((block) => (
               <div key={block.id} className="flex items-center justify-between gap-3 border-b border-border/50 py-3 last:border-0">
@@ -188,6 +205,12 @@ export function ClassScheduleEditor({ initial }: { initial: ClassBlock[] }) {
       </Card>
       </div>
       <ScheduleExportSheet blocks={blocks} captureRef={exportRef} />
+      <ScheduleImportDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        existing={blocks}
+        onImported={() => router.refresh()}
+      />
     </>
   );
 }

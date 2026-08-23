@@ -24,6 +24,10 @@ function googleProvider() {
   return createGoogle({ apiKey });
 }
 
+export function geminiFlash() {
+  return googleProvider()("gemini-3.7-flash");
+}
+
 export function createFlowAgent(ctx: AgentContext) {
   const now = new Date();
   const when = formatInTimeZone(now, ctx.timeZone, "EEEE d 'de' MMMM yyyy, HH:mm", {
@@ -31,7 +35,7 @@ export function createFlowAgent(ctx: AgentContext) {
   });
 
   return new ToolLoopAgent({
-    model: googleProvider()("gemini-3.7-flash"),
+    model: geminiFlash(),
     instructions: `Eres Flow, una app de organización personal en español (Costa Rica).
 Zona horaria del usuario: ${ctx.timeZone}.
 Ahora mismo es ${when}.
