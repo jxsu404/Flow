@@ -1,6 +1,6 @@
 "use client";
 
-import { Mic, Square } from "lucide-react";
+import { Mic, Send, Square } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
@@ -125,7 +125,10 @@ export function CommandBar({ featured = false }: { featured?: boolean }) {
         </div>
       ) : null}
       <form
-        className="flex flex-col gap-3 sm:flex-row sm:items-center"
+        className={cn(
+          "flex items-center gap-2 rounded-xl bg-background/70 ring-1 ring-foreground/10",
+          featured ? "px-2 py-2 sm:px-2.5" : "px-2 py-1.5",
+        )}
         onSubmit={(event) => {
           event.preventDefault();
           void submit(text, sourceRef.current);
@@ -135,9 +138,10 @@ export function CommandBar({ featured = false }: { featured?: boolean }) {
         <Button
           type="button"
           size="icon-lg"
-          variant={listening ? "destructive" : "secondary"}
+          variant={listening ? "destructive" : "ghost"}
           onClick={toggleVoice}
           aria-label={listening ? "Detener dictado" : "Hablar"}
+          className={listening ? undefined : "text-muted-foreground"}
         >
           {listening ? <Square className="size-4" /> : <Mic className="size-4" />}
         </Button>
@@ -149,11 +153,20 @@ export function CommandBar({ featured = false }: { featured?: boolean }) {
             setText(event.target.value);
           }}
           placeholder="Tengo que entregar el proyecto de programación el jueves a las 5..."
-          className={cn("flex-1", featured ? "h-12 text-base md:text-base" : "h-11")}
+          className={cn(
+            "flex-1 border-0 bg-transparent shadow-none focus-visible:ring-0 dark:bg-transparent",
+            featured ? "h-10 text-base md:text-base" : "h-9",
+          )}
           disabled={pending}
         />
-        <Button type="submit" className={cn("px-5", featured ? "h-12" : "h-11")} disabled={pending || !text.trim()}>
-          {pending ? "Organizando…" : "Enviar"}
+        <Button
+          type="submit"
+          className={cn("shrink-0 px-3", featured ? "h-10" : "h-9")}
+          disabled={pending || !text.trim()}
+          aria-label={pending ? "Organizando" : "Enviar"}
+        >
+          <Send className="size-4" />
+          <span className="hidden sm:inline">{pending ? "Organizando…" : "Enviar"}</span>
         </Button>
       </form>
       {status || !featured ? (

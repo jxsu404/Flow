@@ -1,22 +1,18 @@
 import Link from "next/link";
-import { CalendarClock, CalendarDays, ChevronRight, CloudSun, Moon, Sparkles, Sun, Timer } from "lucide-react";
+import { CalendarCheck, CalendarClock, CalendarDays, ChevronRight, CloudSun, Moon, Sparkles, Sun, Timer } from "lucide-react";
+import { OccupancyRing, TimeRibbon } from "@/components/time-ribbon";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DeadlineRow } from "@/components/deadline-list";
 import { WeekSchedule } from "@/components/week-schedule";
-import type { DashboardData } from "@/lib/dashboard";
 import { DAY_PARTS } from "@/lib/availability";
+import { daySegments } from "@/lib/calendar-grid";
+import { clockInZone } from "@/lib/clock";
+import type { DashboardData } from "@/lib/dashboard";
 import { dayInsight, suggestionPrompt, type DayPlan, type DaySegment } from "@/lib/day-plan";
-
-const busyKindLabel: Record<string, string> = {
-  class: "Clase",
-  exam: "Examen",
-  event: "Evento",
-  calendar: "Calendar",
-  assignment: "Entrega",
-  task: "Tarea",
-};
+import { subjectTone } from "@/lib/subject-color";
+import { cn } from "@/lib/utils";
 
 const partIcons = {
   Mañana: Sun,
@@ -28,10 +24,11 @@ function compactRange(label: string) {
   return label.replace(/ – /g, "–");
 }
 
-function planOccupancy(plan: DayPlan): { pct: number; busyCount: number } {
+function planOccupancy(plan: DayPlan): { pct: number; busyCount: number; hasSuggestion: boolean } {
   let busyMin = 0;
   let freeMin = 0;
   let busyCount = 0;
+  let hasSuggestion = false;
   for (const segment of plan.segments) {
     const minutes = Math.max(0, (segment.end.getTime() - segment.start.getTime()) / 60_000);
     if (segment.type === "busy") {
@@ -39,10 +36,11 @@ function planOccupancy(plan: DayPlan): { pct: number; busyCount: number } {
       busyCount += 1;
     } else {
       freeMin += minutes;
+      if (segment.suggestion) hasSuggestion = true;
     }
   }
   const total = busyMin + freeMin;
-  return { pct: total === 0 ? 0 : Math.round((busyMin / total) * 100), busyCount };
+  return { pct: total === 0 ? 0 : Math.round((busyMin / total) * 100), busyCount, hasSuggestion };
 }
 
 function partDefaultRange(part: string): string {
@@ -65,9 +63,15 @@ function PartCard({ part, segments }: { part: keyof typeof partIcons; segments: 
   const range = spanLabel(segments, partDefaultRange(part));
   const suggestion = free.find((segment) => segment.suggestion)?.suggestion;
   const pastEmpty = segments.length === 0;
+  const tone = busy[0] ? subjectTone(busy[0].title, busy[0].kind) : null;
 
   return (
-    <div className="rounded-xl bg-secondary/50 px-3 py-2.5 ring-1 ring-foreground/8">
+    <div
+      className={cn(
+        "rounded-xl bg-secondary/50 px-3 py-2.5 ring-1 ring-foreground/8",
+        tone && `border-l-2 ${tone.accent}`,
+      )}
+    >
       <div className="flex items-center gap-1.5 text-muted-foreground">
         <Icon className="size-3.5" />
         <p className="text-xs font-medium tracking-wide text-foreground uppercase">{part}</p>
@@ -83,7 +87,7 @@ function PartCard({ part, segments }: { part: keyof typeof partIcons; segments: 
             <div key={`${segment.title}-${segment.start.toISOString()}`}>
               <p className="text-sm font-medium leading-snug">{segment.title}</p>
               <p className="text-xs text-muted-foreground">
-                {busyKindLabel[segment.kind] ?? segment.kind}
+                {compactRange(segment.rangeLabel)}
                 {segment.location ? ` · ${segment.location}` : ""}
               </p>
             </div>
@@ -107,19 +111,17 @@ function DayTimeline({ plan }: { plan: DayPlan }) {
   return (
     <div className="flex flex-col gap-3">
       {freeLead ? (
-        <p className="flex items-start gap-1.5 text-sm text-muted-foreground">
+        <div className="flex items-start gap-1.5 text-sm">
           {occupancy.busyCount === 0 ? <Sparkles className="mt-0.5 size-4 shrink-0 text-primary/80" /> : null}
-          <span>{freeLead}</span>
-        </p>
+          <div>
+            <p className="text-muted-foreground">{freeLead}</p>
+            {occupancy.busyCount === 0 && !occupancy.hasSuggestion ? (
+              <p className="mt-0.5 text-xs text-muted-foreground">Un buen momento para adelantar tareas.</p>
+            ) : null}
+          </div>
+        </div>
       ) : null}
-      <div>
-        <div className="mb-1.5 flex items-center justify-between gap-3 text-xs text-muted-foreground">
-          <span>{occupancy.pct}% ocupado en el horario despierto</span>
-        </div>
-        <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-          <div className="h-full rounded-full bg-primary/75" style={{ width: `${occupancy.pct}%` }} />
-        </div>
-      </div>
+      <OccupancyRing pct={occupancy.pct} label="Día ocupado" />
       <div className="grid gap-2 sm:grid-cols-3">
         {parts.map((part) => (
           <PartCard
@@ -137,6 +139,9 @@ const UPCOMING_PREVIEW = 5;
 
 export function DashboardView({ data }: { data: DashboardData }) {
   const preview = data.upcoming.slice(0, UPCOMING_PREVIEW);
+  const todayDay = data.weekDays.find((day) => day.isToday || day.date === data.today);
+  const clock = clockInZone(data.timeZone);
+  const CalendarIcon = data.calendarConnected ? CalendarCheck : CalendarClock;
 
   return (
     <div className="flex flex-col gap-6">
@@ -144,7 +149,7 @@ export function DashboardView({ data }: { data: DashboardData }) {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-[17px]">
-              <CalendarDays className="size-4 text-muted-foreground" />
+              <CalendarDays className="size-4 text-primary" />
               Hoy
             </CardTitle>
             <CardDescription>{data.todayLabel}</CardDescription>
@@ -155,6 +160,9 @@ export function DashboardView({ data }: { data: DashboardData }) {
             ) : (
               <p className="text-sm text-muted-foreground">No pude armar el día de hoy.</p>
             )}
+            {todayDay ? (
+              <TimeRibbon segments={daySegments(todayDay)} nowStartMin={clock.startMin} />
+            ) : null}
             {data.todayItems.length > 0 ? (
               <div>
                 <p className="mb-1 text-xs font-medium tracking-wide text-muted-foreground uppercase">
@@ -176,7 +184,7 @@ export function DashboardView({ data }: { data: DashboardData }) {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-[17px]">
-              <Timer className="size-4 text-muted-foreground" />
+              <Timer className="size-4 text-primary" />
               Entregas y exámenes
             </CardTitle>
             <CardDescription>Lo que vence pronto, para escanear de un vistazo.</CardDescription>
@@ -218,7 +226,7 @@ export function DashboardView({ data }: { data: DashboardData }) {
 
       <div className="flex items-center justify-between gap-4 rounded-xl px-4 py-3 ring-1 ring-foreground/10">
         <div className="flex min-w-0 items-center gap-3">
-          <CalendarClock className="size-5 shrink-0 text-muted-foreground" />
+          <CalendarIcon className="size-5 shrink-0 text-muted-foreground" />
           <div className="min-w-0">
             <p className="text-sm font-medium">Google Calendar</p>
             <p className="mt-0.5 text-xs text-muted-foreground">

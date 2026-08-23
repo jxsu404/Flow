@@ -1,9 +1,21 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { CalendarDays, ChevronLeft, ChevronRight, Sparkles } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  Atom,
+  BookOpen,
+  Calendar,
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  Code,
+  Database,
+  GraduationCap,
+  ListTodo,
+  Sparkles,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { toast } from "sonner";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -12,15 +24,19 @@ import {
   busyBlocksFromDay,
   dayHasBusy,
   formatHour,
+  formatMinutesLabel,
   gridHours,
   legendFromDays,
+  nowLineTopFromClock,
   occupancy,
+  weekStats,
   type CalendarBlock,
 } from "@/lib/calendar-grid";
+import { clockInZone } from "@/lib/clock";
 import type { ScheduleData } from "@/lib/dashboard";
 import { addCalendarDays, addCalendarMonths, dayColumnLabel } from "@/lib/datetime";
 import type { ScheduleDay } from "@/lib/day-plan";
-import { subjectTone } from "@/lib/subject-color";
+import { subjectGlyph, subjectTone } from "@/lib/subject-color";
 import { cn } from "@/lib/utils";
 
 const busyKindLabel: Record<string, string> = {
@@ -30,6 +46,17 @@ const busyKindLabel: Record<string, string> = {
   calendar: "Calendar",
   assignment: "Entrega",
   task: "Tarea",
+};
+
+const GLYPH: Record<ReturnType<typeof subjectGlyph>, LucideIcon> = {
+  calendar: CalendarDays,
+  code: Code,
+  atom: Atom,
+  book: BookOpen,
+  database: Database,
+  task: ListTodo,
+  exam: GraduationCap,
+  event: Calendar,
 };
 
 function compactRange(label: string) {
@@ -43,20 +70,24 @@ function EventBlock({ block }: { block: CalendarBlock }) {
   const showMeta = layout.height >= 56;
   const showLocation = layout.height >= 72 && block.location;
   const kind = busyKindLabel[block.kind];
+  const Icon = GLYPH[subjectGlyph(block.title, block.kind)];
 
   return (
     <div
       className={cn(
-        "absolute inset-x-1 overflow-hidden rounded-lg border px-1.5 py-1 leading-tight",
+        "absolute inset-x-1 overflow-hidden rounded-lg border border-l-2 px-1.5 py-1 leading-tight",
         tone.block,
-        block.kind !== "class" && "ring-1 ring-inset ring-white/10",
+        tone.accent,
       )}
       style={{ top: layout.top, height: layout.height }}
       title={[block.title, compactRange(block.rangeLabel), block.location, kind]
         .filter(Boolean)
         .join(" · ")}
     >
-      <p className="truncate text-xs font-medium">{block.title}</p>
+      <div className="flex items-start gap-1">
+        {showMeta ? <Icon className="mt-0.5 size-3 shrink-0 opacity-80" /> : null}
+        <p className="min-w-0 truncate text-xs font-medium">{block.title}</p>
+      </div>
       {showMeta ? (
         <p className="mt-0.5 font-mono text-[11px] tabular-nums opacity-80">
           {compactRange(block.rangeLabel)}
@@ -70,13 +101,31 @@ function EventBlock({ block }: { block: CalendarBlock }) {
   );
 }
 
-function DayBody({ day, hours }: { day: ScheduleDay; hours: number[] }) {
+function NowLine({ top }: { top: number | null }) {
+  if (top == null) return null;
+  return (
+    <div className="pointer-events-none absolute inset-x-0 z-20" style={{ top }}>
+      <div className="absolute -left-1.5 -top-1 size-2.5 rounded-full bg-primary" />
+      <div className="h-px bg-primary" />
+    </div>
+  );
+}
+
+function DayBody({
+  day,
+  hours,
+  nowTop,
+}: {
+  day: ScheduleDay;
+  hours: number[];
+  nowTop: number | null;
+}) {
   const blocks = busyBlocksFromDay(day);
   const emptyToday = day.isToday && !dayHasBusy(day);
 
   return (
     <div
-      className={cn("relative min-w-0 border-l border-border/40", day.isToday && "bg-primary/4")}
+      className={cn("relative min-w-0 border-l border-border/40", day.isToday && "bg-primary/5")}
       style={{ height: hours.length * HOUR_HEIGHT }}
     >
       {hours.map((hour) => (
@@ -89,17 +138,27 @@ function DayBody({ day, hours }: { day: ScheduleDay; hours: number[] }) {
       {blocks.map((block) => (
         <EventBlock key={`${block.title}-${block.startMin}-${block.kind}`} block={block} />
       ))}
+      {day.isToday ? <NowLine top={nowTop} /> : null}
       {emptyToday ? (
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 px-3 text-center">
           <Sparkles className="size-5 text-primary/80" />
-          <p className="text-xs leading-snug text-muted-foreground">Tu día está bastante libre.</p>
+          <p className="text-xs font-medium leading-snug">Tu día está bastante libre.</p>
+          <p className="text-xs leading-snug text-muted-foreground">Un buen momento para adelantar tareas.</p>
         </div>
       ) : null}
     </div>
   );
 }
 
-function WeekGrid({ days, timeZone }: { days: ScheduleDay[]; timeZone: string }) {
+function WeekGrid({
+  days,
+  timeZone,
+  nowTop,
+}: {
+  days: ScheduleDay[];
+  timeZone: string;
+  nowTop: number | null;
+}) {
   const hours = gridHours();
 
   return (
@@ -115,18 +174,16 @@ function WeekGrid({ days, timeZone }: { days: ScheduleDay[]; timeZone: string })
                 key={`head-${day.date}`}
                 className={cn(
                   "flex flex-col items-center rounded-t-lg px-1 py-2",
-                  day.isToday && "bg-primary/8 ring-1 ring-inset ring-primary/35",
+                  day.isToday && "bg-primary/10 ring-1 ring-inset ring-primary/40",
                 )}
               >
                 <p className={cn("text-xs font-medium", day.isToday ? "text-primary" : "text-muted-foreground")}>
                   {label.abbr} {label.day}
                 </p>
                 {day.isToday ? (
-                  <Badge variant="secondary" className="mt-1 h-5 bg-primary/15 px-1.5 text-[10px] text-primary">
-                    Hoy
-                  </Badge>
+                  <span className="mt-1 size-1.5 rounded-full bg-primary" aria-label="Hoy" />
                 ) : (
-                  <span className="mt-1 h-5" />
+                  <span className="mt-1 h-1.5" />
                 )}
                 <div className="mt-1.5 h-1 w-full max-w-14 overflow-hidden rounded-full bg-muted">
                   <div className="h-full rounded-full bg-primary/70" style={{ width: `${stats.pct}%` }} />
@@ -146,7 +203,7 @@ function WeekGrid({ days, timeZone }: { days: ScheduleDay[]; timeZone: string })
             ))}
           </div>
           {days.map((day) => (
-            <DayBody key={day.date} day={day} hours={hours} />
+            <DayBody key={day.date} day={day} hours={hours} nowTop={nowTop} />
           ))}
         </div>
       </div>
@@ -170,13 +227,19 @@ function MonthCell({
     <div
       className={cn(
         "flex min-h-[7.5rem] flex-col gap-1 rounded-lg p-1.5 ring-1 ring-border/50",
-        day.isToday && "bg-primary/8 ring-primary/40",
+        day.isToday && "bg-primary/10 ring-primary/40",
         !inMonth && "opacity-40",
       )}
     >
       <div className="flex items-center justify-between">
-        <span className={cn("text-xs font-medium", day.isToday && "text-primary")}>{dateNum}</span>
-        {day.isToday ? <span className="text-[10px] font-medium text-primary">Hoy</span> : null}
+        <span
+          className={cn(
+            "flex size-6 items-center justify-center text-xs font-medium",
+            day.isToday && "rounded-full bg-primary text-primary-foreground",
+          )}
+        >
+          {dateNum}
+        </span>
       </div>
       <div className="flex flex-col gap-1">
         {shown.map((block) => {
@@ -221,7 +284,7 @@ function Legend({ days }: { days: ScheduleDay[] }) {
   const items = legendFromDays(days);
   if (items.length === 0) return null;
   return (
-    <div className="flex flex-wrap gap-x-3 gap-y-1.5 pt-1">
+    <div className="flex flex-wrap gap-x-3 gap-y-1.5">
       {items.map((item) => (
         <div key={item.key} className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <span className={cn("size-2 rounded-full", item.tone.swatch)} />
@@ -254,6 +317,12 @@ export function WeekSchedule({
   const [view, setView] = useState<ViewMode>("week");
   const [nav, setNav] = useState<ScheduleData | null>(null);
   const [loading, setLoading] = useState(false);
+  const [clock, setClock] = useState(() => clockInZone(timeZone));
+
+  useEffect(() => {
+    const id = setInterval(() => setClock(clockInZone(timeZone)), 60_000);
+    return () => clearInterval(id);
+  }, [timeZone]);
 
   const weekDays = nav?.weekDays ?? initialWeekDays;
   const monthDays = nav?.monthDays ?? initialMonthDays;
@@ -261,6 +330,8 @@ export function WeekSchedule({
   const monthLabel = nav?.monthLabel ?? initialMonthLabel;
   const month = nav?.month ?? initialMonth;
   const anchor = view === "week" ? (weekDays[0]?.date ?? today) : `${month}-15`;
+  const nowTop = nowLineTopFromClock(clock.hour, clock.minute);
+  const stats = weekStats(weekDays, today, clock.startMin);
 
   async function load(date: string) {
     if (date === today) {
@@ -300,7 +371,6 @@ export function WeekSchedule({
 
   const periodLabel = view === "week" ? weekLabel : monthLabel;
   const legendDays = view === "week" ? weekDays : monthDays;
-
   const paddedWeek = useMemo(() => weekDays.slice(0, 7), [weekDays]);
 
   if (paddedWeek.length === 0 && monthDays.length === 0) {
@@ -321,7 +391,7 @@ export function WeekSchedule({
       <CardHeader className="gap-3 sm:grid-cols-[1fr_auto]">
         <div>
           <CardTitle className="flex items-center gap-2 text-[17px]">
-            <CalendarDays className="size-4 text-muted-foreground" />
+            <CalendarDays className="size-4 text-primary" />
             Horario
           </CardTitle>
           <CardDescription>
@@ -389,7 +459,7 @@ export function WeekSchedule({
       </CardHeader>
       <CardContent className={cn("flex flex-col gap-3", loading && "opacity-70")}>
         {view === "week" ? (
-          <WeekGrid days={paddedWeek} timeZone={timeZone} />
+          <WeekGrid days={paddedWeek} timeZone={timeZone} nowTop={nowTop} />
         ) : (
           <div className="overflow-x-auto">
             <div className="min-w-[640px]">
@@ -397,7 +467,28 @@ export function WeekSchedule({
             </div>
           </div>
         )}
-        <Legend days={legendDays} />
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <Legend days={legendDays} />
+          {view === "week" && (stats.classTotal > 0 || stats.freeMin > 0) ? (
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+              {stats.classTotal > 0 ? (
+                <span className="inline-flex items-center gap-2">
+                  <span
+                    className="h-1.5 w-14 overflow-hidden rounded-full bg-muted"
+                    aria-hidden
+                  >
+                    <span
+                      className="block h-full rounded-full bg-primary"
+                      style={{ width: `${Math.round((stats.classDone / stats.classTotal) * 100)}%` }}
+                    />
+                  </span>
+                  {stats.classDone}/{stats.classTotal} clases
+                </span>
+              ) : null}
+              {stats.freeMin > 0 ? <span>{formatMinutesLabel(stats.freeMin)} libres esta semana</span> : null}
+            </div>
+          ) : null}
+        </div>
       </CardContent>
     </Card>
   );

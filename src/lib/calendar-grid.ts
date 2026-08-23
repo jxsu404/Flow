@@ -122,3 +122,54 @@ export function legendFromDays(days: ScheduleDay[]): LegendItem[] {
 export function dayHasBusy(day: ScheduleDay): boolean {
   return day.parts.some((part) => part.segments.some((segment) => segment.type === "busy"));
 }
+
+export const GRID_START_MIN = (GRID_START_HOUR - AWAKE_START_HOUR) * 60;
+export const GRID_SPAN_MIN = (GRID_END_HOUR - GRID_START_HOUR) * 60;
+
+export function nowLineTopFromClock(hour: number, minute: number): number | null {
+  const current = hour * 60 + minute;
+  const start = GRID_START_HOUR * 60;
+  const end = GRID_END_HOUR * 60;
+  if (current < start || current >= end) return null;
+  return ((current - start) / 60) * HOUR_HEIGHT;
+}
+
+export function awakeStartMinFromClock(hour: number, minute: number): number {
+  return hour * 60 + minute - AWAKE_START_HOUR * 60;
+}
+
+export function formatMinutesLabel(minutes: number): string {
+  const whole = Math.max(0, Math.round(minutes));
+  const hours = Math.floor(whole / 60);
+  const rest = whole % 60;
+  if (hours === 0) return `${rest}m`;
+  if (rest === 0) return `${hours}h`;
+  return `${hours}h ${rest}m`;
+}
+
+export function weekStats(
+  days: ScheduleDay[],
+  today: string,
+  nowStartMin: number,
+): { classTotal: number; classDone: number; freeMin: number; busyMin: number } {
+  let classTotal = 0;
+  let classDone = 0;
+  let freeMin = 0;
+  let busyMin = 0;
+  for (const day of days) {
+    const stats = occupancy(day);
+    freeMin += stats.freeMin;
+    busyMin += stats.busyMin;
+    for (const block of busyBlocksFromDay(day)) {
+      if (block.kind !== "class") continue;
+      classTotal += 1;
+      const end = block.startMin + block.durationMin;
+      if (day.date < today || (day.date === today && end <= nowStartMin)) classDone += 1;
+    }
+  }
+  return { classTotal, classDone, freeMin, busyMin };
+}
+
+export function daySegments(day: ScheduleDay): ScheduleSegment[] {
+  return day.parts.flatMap((part) => part.segments);
+}

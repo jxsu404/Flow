@@ -38,12 +38,12 @@ export const KIND_LABEL: Record<ActivityKind, string> = {
 };
 
 export const KIND_BADGE_CLASS: Record<ActivityKind, string> = {
-  tarea: "",
+  tarea: "border-transparent bg-sky-500/15 text-sky-800 dark:text-sky-300",
   examen: "border-transparent bg-orange-500/15 text-orange-800 dark:text-orange-300",
-  proyecto: "",
-  trabajo: "",
-  entrega: "",
-  evento: "",
+  proyecto: "border-transparent bg-violet-500/15 text-violet-800 dark:text-violet-300",
+  trabajo: "border-transparent bg-violet-500/15 text-violet-800 dark:text-violet-300",
+  entrega: "border-transparent bg-violet-500/15 text-violet-800 dark:text-violet-300",
+  evento: "border-transparent bg-slate-500/15 text-slate-700 dark:text-slate-300",
 };
 
 export function daysUntilDue(dueAt: Date, today: string, timeZone: string): number {

@@ -7,15 +7,16 @@ import {
   activityKind,
   dueCaption,
   urgencyForDue,
-  type UrgencyLevel,
+  type Urgency,
 } from "@/lib/deadlines";
 import { cn } from "@/lib/utils";
 
-const urgencyClass: Record<UrgencyLevel, string> = {
-  urgent: "border-transparent bg-red-500/15 text-red-700 dark:text-red-400",
-  soon: "border-transparent bg-orange-500/15 text-orange-800 dark:text-orange-300",
-  later: "border-transparent bg-muted text-muted-foreground",
-};
+function urgencyBadgeClass(urgency: Urgency): string {
+  if (urgency.label === "HOY") return "border-red-400/55 bg-transparent text-red-400";
+  if (urgency.level === "urgent") return "border-transparent bg-red-500/15 text-red-700 dark:text-red-400";
+  if (urgency.level === "soon") return "border-transparent bg-orange-500/15 text-orange-800 dark:text-orange-300";
+  return "border-transparent bg-primary/15 text-primary";
+}
 
 export function DeadlineRow({
   item,
@@ -48,7 +49,7 @@ export function DeadlineRow({
           {KIND_LABEL[kind]}
         </Badge>
         {urgency ? (
-          <Badge className={cn("h-5 tracking-wide", urgencyClass[urgency.level])}>
+          <Badge className={cn("h-5 tracking-wide", urgencyBadgeClass(urgency))}>
             {urgency.label}
           </Badge>
         ) : null}

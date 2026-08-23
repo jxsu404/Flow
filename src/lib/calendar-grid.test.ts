@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { formatInTimeZone } from "date-fns-tz";
 import { eachDateInZone } from "./availability";
-import { blockLayout, busyBlocksFromDay, occupancy } from "./calendar-grid";
+import { blockLayout, busyBlocksFromDay, formatMinutesLabel, nowLineTopFromClock, occupancy, weekStats } from "./calendar-grid";
 import { addCalendarDays, addCalendarMonths, monthGridRange, weekContaining } from "./datetime";
 import type { ScheduleDay } from "./day-plan";
 import { subjectTone } from "./subject-color";
@@ -10,7 +10,12 @@ import { subjectTone } from "./subject-color";
 const TZ = "America/Costa_Rica";
 
 test("el color de una materia es estable y las tareas no usan esa paleta", () => {
-  assert.equal(subjectTone("Matemáticas", "class").key, subjectTone("matemáticas", "class").key);
+  assert.equal(subjectTone("Matemáticas", "class").key, "teal");
+  assert.equal(subjectTone("matemáticas", "class").key, subjectTone("Matemáticas II", "class").key);
+  assert.equal(subjectTone("Programación", "class").key, "violet");
+  assert.equal(subjectTone("Física", "class").key, "orange");
+  assert.equal(subjectTone("Base de datos", "class").key, "emerald");
+  assert.equal(subjectTone("Inglés", "class").key, "sky");
   assert.equal(subjectTone("Tarea de conta", "task").key, "task");
   assert.equal(subjectTone("Parcial", "exam").key, "exam");
 });
@@ -153,4 +158,20 @@ test("ocupación usa minutos ocupados vs libres reales", () => {
   assert.equal(stats.busyMin, 120);
   assert.equal(stats.freeMin, 120);
   assert.equal(stats.pct, 50);
+});
+
+test("la línea de ahora cae en la hora de la grilla", () => {
+  assert.equal(nowLineTopFromClock(8, 0), 0);
+  assert.equal(nowLineTopFromClock(9, 0), 48);
+  assert.equal(nowLineTopFromClock(7, 59), null);
+  assert.equal(nowLineTopFromClock(22, 0), null);
+});
+
+test("weekStats cuenta clases hechas y tiempo libre real", () => {
+  const monday = sampleDay();
+  const stats = weekStats([monday], "2026-08-17", 180);
+  assert.equal(stats.classTotal, 1);
+  assert.equal(stats.classDone, 1);
+  assert.equal(stats.freeMin, 120);
+  assert.equal(formatMinutesLabel(80), "1h 20m");
 });
