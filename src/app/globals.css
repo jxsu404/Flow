@@ -128,3 +128,40 @@
     @apply font-sans;
   }
 }
+
+/* Visible scrollbar for the week/month schedule grid. */
+.horario-scroll {
+  max-width: 100%;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklch, var(--primary) 75%, var(--muted-foreground))
+    color-mix(in oklch, var(--muted) 80%, transparent);
+}
+
+.horario-scroll::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+
+.horario-scroll::-webkit-scrollbar-track {
+  margin: 4px;
+  background: color-mix(in oklch, var(--muted) 75%, transparent);
+  border-radius: 999px;
+}
+
+.horario-scroll::-webkit-scrollbar-thumb {
+  background: color-mix(in oklch, var(--primary) 70%, var(--muted-foreground));
+  background-clip: content-box;
+  border: 2px solid transparent;
+  border-radius: 999px;
+}
+
+.horario-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--primary);
+  background-clip: content-box;
+  border: 2px solid transparent;
+}
+
+.horario-scroll::-webkit-scrollbar-corner {
+  background: transparent;
+}

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
+import { Waves } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const links = [
@@ -17,7 +18,8 @@ export function AppHeader({ name }: { name?: string | null }) {
   return (
     <header className="flex items-center justify-between gap-4 border-b border-border/70 px-4 py-3 md:px-8">
       <div className="flex items-center gap-6">
-        <Link href="/app" className="font-semibold tracking-tight">
+        <Link href="/app" className="flex items-center gap-2 font-semibold tracking-tight">
+          <Waves className="size-4 text-primary" />
           Flow
         </Link>
         <nav className="hidden items-center gap-4 text-sm text-muted-foreground sm:flex">
@@ -25,7 +27,7 @@ export function AppHeader({ name }: { name?: string | null }) {
             <Link
               key={link.href}
               href={link.href}
-              className={pathname === link.href ? "text-foreground" : "hover:text-foreground"}
+              className={pathname === link.href ? "text-primary" : "hover:text-foreground"}
             >
               {link.label}
             </Link>

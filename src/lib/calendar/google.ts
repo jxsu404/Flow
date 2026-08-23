@@ -171,17 +171,11 @@ export async function listCalendarBusy(
   const busy: Interval[] = [];
   for (const event of listed.data.items ?? []) {
     if (event.status === "cancelled") continue;
-    const start = event.start?.dateTime
-      ? new Date(event.start.dateTime)
-      : event.start?.date
-        ? new Date(`${event.start.date}T00:00:00`)
-        : null;
-    const end = event.end?.dateTime
-      ? new Date(event.end.dateTime)
-      : event.end?.date
-        ? new Date(`${event.end.date}T00:00:00`)
-        : null;
-    if (!start || !end) continue;
+    // All-day events are deadlines/reminders, not clock-blocked time.
+    if (!event.start?.dateTime || !event.end?.dateTime) continue;
+    const start = new Date(event.start.dateTime);
+    const end = new Date(event.end.dateTime);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) continue;
     busy.push({
       start,
       end,

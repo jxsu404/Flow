@@ -3,18 +3,54 @@ import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
 import type { ClassBlock, Item } from "@/db/schema";
 import { parseHm } from "./datetime";
 
-export type Interval = { start: Date; end: Date; title?: string; kind?: string };
+export type Interval = {
+  start: Date;
+  end: Date;
+  title?: string;
+  kind?: string;
+  location?: string | null;
+};
 
 export type FreeSlot = {
   start: Date;
   end: Date;
   minutes: number;
   label: string;
+  date: string;
+  partLabel: string;
+  rangeLabel: string;
 };
 
-const WORK_START = "07:00";
-const WORK_END = "22:00";
+/** Horas despiertas. 22:00–07:00 cuenta como descanso, no como tiempo libre. */
+export const AWAKE_START = "07:00";
+export const AWAKE_END = "22:00";
 const MIN_GAP_MINUTES = 30;
+
+export const DAY_PARTS = [
+  { id: "morning", label: "Mañana", start: "07:00", end: "12:00" },
+  { id: "afternoon", label: "Tarde", start: "12:00", end: "18:00" },
+  { id: "evening", label: "Noche", start: "18:00", end: "22:00" },
+] as const;
+
+export type DayPartId = (typeof DAY_PARTS)[number]["id"];
+
+export function partLabelFor(date: Date, timeZone: string): string {
+  const hour = Number(formatInTimeZone(date, timeZone, "H"));
+  if (hour < 12) return "Mañana";
+  if (hour < 18) return "Tarde";
+  return "Noche";
+}
+
+export function formatRange(start: Date, end: Date, timeZone: string): string {
+  return `${formatInTimeZone(start, timeZone, "HH:mm")} – ${formatInTimeZone(end, timeZone, "HH:mm")}`;
+}
+
+export function clipInterval(interval: Interval, from: Date, to: Date): Interval | null {
+  const start = interval.start < from ? from : interval.start;
+  const end = interval.end > to ? to : interval.end;
+  if (end <= start) return null;
+  return { ...interval, start, end };
+}
 
 export function eachDateInZone(from: Date, to: Date, timeZone: string): string[] {
   const startStr = formatInTimeZone(from, timeZone, "yyyy-MM-dd");
@@ -44,7 +80,9 @@ export function localInterval(
 }
 
 export function expandClassBlocks(
-  blocks: Pick<ClassBlock, "title" | "dayOfWeek" | "startTime" | "endTime">[],
+  blocks: Array<
+    Pick<ClassBlock, "title" | "dayOfWeek" | "startTime" | "endTime"> & { location?: string | null }
+  >,
   from: Date,
   to: Date,
   timeZone: string,
@@ -60,6 +98,7 @@ export function expandClassBlocks(
         ...localInterval(dateStr, block.startTime, block.endTime, timeZone),
         title: block.title,
         kind: "class",
+        location: block.location ?? null,
       });
     }
   }
@@ -125,7 +164,12 @@ export function subtractBusy(windows: Interval[], busy: Interval[]): Interval[] 
     for (const block of mergedBusy) {
       if (block.end <= cursor || block.start >= window.end) continue;
       if (block.start > cursor) {
-        free.push({ start: cursor, end: block.start < window.end ? block.start : window.end });
+        free.push({
+          start: cursor,
+          end: block.start < window.end ? block.start : window.end,
+          title: window.title,
+          kind: window.kind,
+        });
       }
       if (block.end > cursor) {
         cursor = block.end;
@@ -133,7 +177,7 @@ export function subtractBusy(windows: Interval[], busy: Interval[]): Interval[] 
       if (cursor >= window.end) break;
     }
     if (cursor < window.end) {
-      free.push({ start: cursor, end: window.end });
+      free.push({ start: cursor, end: window.end, title: window.title, kind: window.kind });
     }
   }
   return free.filter((slot) => slot.end.getTime() - slot.start.getTime() >= MIN_GAP_MINUTES * 60_000);
@@ -143,12 +187,28 @@ export function workWindows(
   from: Date,
   to: Date,
   timeZone: string,
-  workStart = WORK_START,
-  workEnd = WORK_END,
+  workStart = AWAKE_START,
+  workEnd = AWAKE_END,
 ): Interval[] {
   return eachDateInZone(from, to, timeZone).map((dateStr) =>
     localInterval(dateStr, workStart, workEnd, timeZone),
   );
+}
+
+export function dayPartWindows(from: Date, to: Date, timeZone: string): Interval[] {
+  const windows: Interval[] = [];
+  for (const dateStr of eachDateInZone(from, to, timeZone)) {
+    for (const part of DAY_PARTS) {
+      const raw = {
+        ...localInterval(dateStr, part.start, part.end, timeZone),
+        title: part.label,
+        kind: part.id,
+      };
+      const clipped = clipInterval(raw, from, to);
+      if (clipped) windows.push(clipped);
+    }
+  }
+  return windows;
 }
 
 export function findFreeSlots(input: {
@@ -159,7 +219,7 @@ export function findFreeSlots(input: {
   items: Item[];
   calendarBusy: Interval[];
 }): FreeSlot[] {
-  const windows = workWindows(input.from, input.to, input.timeZone);
+  const windows = dayPartWindows(input.from, input.to, input.timeZone);
   const busy = [
     ...expandClassBlocks(input.classBlocks, input.from, input.to, input.timeZone),
     ...itemBusyIntervals(input.items),
@@ -167,10 +227,16 @@ export function findFreeSlots(input: {
   ];
   return subtractBusy(windows, busy).map((slot) => {
     const minutes = Math.round((slot.end.getTime() - slot.start.getTime()) / 60_000);
+    const partLabel = slot.title ?? partLabelFor(slot.start, input.timeZone);
+    const rangeLabel = formatRange(slot.start, slot.end, input.timeZone);
+    const date = formatInTimeZone(slot.start, input.timeZone, "yyyy-MM-dd");
     return {
       ...slot,
       minutes,
-      label: `${formatInTimeZone(slot.start, input.timeZone, "EEE d MMM HH:mm")} – ${formatInTimeZone(slot.end, input.timeZone, "HH:mm")} (${minutes} min)`,
+      date,
+      partLabel,
+      rangeLabel,
+      label: `${formatInTimeZone(slot.start, input.timeZone, "EEE d MMM")} · ${partLabel} ${rangeLabel}`,
     };
   });
 }

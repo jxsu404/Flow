@@ -1,11 +1,12 @@
 "use client";
 
-import { Mic, Square } from "lucide-react";
+import { Mic, Send, Square } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 
 type SpeechRec = {
   lang: string;
@@ -27,7 +28,7 @@ function getSpeechRecognition(): (new () => SpeechRec) | null {
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
 }
 
-export function CommandBar() {
+export function CommandBar({ featured = false }: { featured?: boolean }) {
   const router = useRouter();
   const [text, setText] = useState("");
   const [listening, setListening] = useState(false);
@@ -104,10 +105,30 @@ export function CommandBar() {
     recognition.start();
   }
 
+  const status = listening
+    ? "Escuchando… habla con naturalidad."
+    : lastMessage;
+
   return (
-    <section className="rounded-2xl border border-border/80 bg-card/80 p-4 shadow-sm">
+    <section
+      className={cn(
+        "rounded-2xl border border-border/80 bg-card/80 shadow-sm",
+        featured ? "p-5 md:p-6" : "p-4",
+      )}
+    >
+      {featured ? (
+        <div className="mb-4">
+          <h1 className="text-2xl font-semibold tracking-tight">¿Qué tienes pendiente?</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Escribe lo que necesitas hacer. Flow organiza y sincroniza todo por ti.
+          </p>
+        </div>
+      ) : null}
       <form
-        className="flex flex-col gap-3 sm:flex-row sm:items-center"
+        className={cn(
+          "flex items-center gap-2 rounded-xl bg-background/70 ring-1 ring-foreground/10",
+          featured ? "px-2 py-2 sm:px-2.5" : "px-2 py-1.5",
+        )}
         onSubmit={(event) => {
           event.preventDefault();
           void submit(text, sourceRef.current);
@@ -117,9 +138,10 @@ export function CommandBar() {
         <Button
           type="button"
           size="icon-lg"
-          variant={listening ? "destructive" : "secondary"}
+          variant={listening ? "destructive" : "ghost"}
           onClick={toggleVoice}
           aria-label={listening ? "Detener dictado" : "Hablar"}
+          className={listening ? undefined : "text-muted-foreground"}
         >
           {listening ? <Square className="size-4" /> : <Mic className="size-4" />}
         </Button>
@@ -130,19 +152,28 @@ export function CommandBar() {
             textRef.current = event.target.value;
             setText(event.target.value);
           }}
-          placeholder='Prueba: “Tengo que entregar el proyecto de programación el jueves a las 5.”'
-          className="h-11 flex-1"
+          placeholder="Tengo que entregar el proyecto de programación el jueves a las 5..."
+          className={cn(
+            "flex-1 border-0 bg-transparent shadow-none focus-visible:ring-0 dark:bg-transparent",
+            featured ? "h-10 text-base md:text-base" : "h-9",
+          )}
           disabled={pending}
         />
-        <Button type="submit" className="h-11 px-5" disabled={pending || !text.trim()}>
-          {pending ? "Organizando…" : "Enviar"}
+        <Button
+          type="submit"
+          className={cn("shrink-0 px-3", featured ? "h-10" : "h-9")}
+          disabled={pending || !text.trim()}
+          aria-label={pending ? "Organizando" : "Enviar"}
+        >
+          <Send className="size-4" />
+          <span className="hidden sm:inline">{pending ? "Organizando…" : "Enviar"}</span>
         </Button>
       </form>
-      <p className="mt-3 text-sm text-muted-foreground">
-        {listening
-          ? "Escuchando… habla con naturalidad."
-          : lastMessage ?? "Habla o escribe. Flow entiende, organiza y sincroniza."}
-      </p>
+      {status || !featured ? (
+        <p className="mt-3 text-sm text-muted-foreground">
+          {status ?? "Habla o escribe. Flow entiende, organiza y sincroniza."}
+        </p>
+      ) : null}
     </section>
   );
 }
