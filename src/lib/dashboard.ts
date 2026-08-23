@@ -1,6 +1,5 @@
 import { getISODay } from "date-fns";
 import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
-import { es } from "date-fns/locale";
 import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { users, type ClassBlock, type Item } from "@/db/schema";
@@ -35,6 +34,7 @@ export type DashboardData = ScheduleData & {
   todayLabel: string;
   todayClasses: Array<ClassBlock & { when: string }>;
   todayItems: Item[];
+  pendingItems: Item[];
   upcoming: Item[];
   todayPlan: DayPlan | null;
 };
@@ -147,9 +147,10 @@ export async function getDashboardData(userId: string): Promise<DashboardData> {
     timeZone,
     today: todayStr,
     calendarConnected,
-    todayLabel: `${ISO_DAY_LABELS[isoDay] ?? ""} ${formatInTimeZone(now, timeZone, "d MMM", { locale: es })}`,
+    todayLabel: `${ISO_DAY_LABELS[isoDay] ?? ""} ${formatInTimeZone(now, timeZone, "d")}`.trim(),
     todayClasses,
     todayItems,
+    pendingItems: pending,
     upcoming,
     todayPlan: plans.find((day) => day.isToday) ?? plans[0] ?? null,
     weekDays: allDays.filter((day) => day.date >= weekStart && day.date <= weekEnd),

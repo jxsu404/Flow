@@ -55,7 +55,7 @@ export function TaskList({ items, timeZone }: { items: Item[]; timeZone: string 
             <p className="text-sm text-muted-foreground">Nada pendiente.</p>
           ) : (
             pending.map((item) => (
-              <div key={item.id} className="flex flex-col gap-2 border-b border-border/50 py-3 last:border-0 sm:flex-row sm:items-center sm:justify-between">
+              <div key={item.id} id={`item-${item.id}`} className="flex scroll-mt-24 flex-col gap-2 border-b border-border/50 py-3 last:border-0 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <p className="font-medium">{item.title}</p>
                   <p className="text-xs text-muted-foreground">

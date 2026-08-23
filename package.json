@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "tsx --test src/lib/availability.test.ts src/lib/day-plan.test.ts src/lib/deadlines.test.ts src/lib/schedule-export.test.ts src/lib/schedule-import.test.ts src/lib/calendar-grid.test.ts src/lib/day-status.test.ts",
+    "test": "tsx --test src/lib/availability.test.ts src/lib/day-plan.test.ts src/lib/deadlines.test.ts src/lib/schedule-export.test.ts src/lib/schedule-import.test.ts src/lib/calendar-grid.test.ts src/lib/day-status.test.ts src/lib/today-insight.test.ts",
     "db:push": "dotenv -e .env.local -- drizzle-kit push",
     "db:generate": "drizzle-kit generate"
   },
