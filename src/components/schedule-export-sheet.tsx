@@ -1,103 +1,31 @@
 "use client";
 
 import type { RefObject } from "react";
-import type { ScheduleDay, SchedulePart, ScheduleSegment } from "@/lib/day-plan";
+import {
+  classTimeBounds,
+  groupClassesByDay,
+  timeToMinutes,
+  type ClassExportBlock,
+} from "@/lib/schedule-export";
 
-const busyKindLabel: Record<string, string> = {
-  class: "Clase",
-  exam: "Examen",
-  event: "Evento",
-  calendar: "Calendar",
-  assignment: "Entrega",
-  task: "Tarea",
-};
-
-const AWAKE = 15 * 60;
-
-function Bar({ segments }: { segments: ScheduleSegment[] }) {
-  return (
-    <div
-      style={{
-        position: "relative",
-        height: 18,
-        overflow: "hidden",
-        borderRadius: 6,
-        background: "#f3f4f6",
-        border: "1px solid #e5e7eb",
-      }}
-    >
-      {segments.map((segment) => (
-        <div
-          key={`${segment.type}-${segment.rangeLabel}`}
-          style={{
-            position: "absolute",
-            top: 0,
-            height: "100%",
-            left: `${Math.max(0, (segment.startMin / AWAKE) * 100)}%`,
-            width: `${Math.max(1.2, (segment.durationMin / AWAKE) * 100)}%`,
-            background: segment.type === "busy" ? "#171717" : "#99f6e4",
-          }}
-        />
-      ))}
-    </div>
-  );
-}
-
-function PartBlock({ part }: { part: SchedulePart }) {
-  return (
-    <div style={{ marginTop: 10 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-        <span>{part.part}</span>
-        <span style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>{part.rangeLabel}</span>
-      </div>
-      <div style={{ marginTop: 6 }}>
-        <Bar segments={part.segments} />
-      </div>
-      {part.segments.map((segment) => (
-        <div
-          key={`${segment.type}-${segment.rangeLabel}`}
-          style={{
-            marginTop: 6,
-            padding: "8px 10px",
-            borderRadius: 8,
-            background: segment.type === "busy" ? "#f3f4f6" : "#f9fafb",
-            border: segment.type === "free" ? "1px dashed #d1d5db" : "1px solid #e5e7eb",
-          }}
-        >
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-            <span style={{ fontWeight: 600, fontSize: 13 }}>{segment.title}</span>
-            <span style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 11, color: "#6b7280" }}>
-              {segment.rangeLabel}
-            </span>
-          </div>
-          {segment.type === "busy" && segment.kind ? (
-            <div style={{ marginTop: 4, fontSize: 11, color: "#6b7280" }}>
-              {busyKindLabel[segment.kind] ?? segment.kind}
-            </div>
-          ) : null}
-          {segment.suggestionTitle ? (
-            <div style={{ marginTop: 4, fontSize: 11, color: "#6b7280" }}>
-              Puedes avanzar {segment.suggestionTitle}
-              {segment.suggestionDue ? ` · ${segment.suggestionDue}` : ""}
-            </div>
-          ) : null}
-        </div>
-      ))}
-    </div>
-  );
+function formatHour(min: number) {
+  const hours = Math.floor(min / 60);
+  return `${String(hours).padStart(2, "0")}:00`;
 }
 
 export function ScheduleExportSheet({
-  days,
+  blocks,
   captureRef,
 }: {
-  days: ScheduleDay[];
+  blocks: ClassExportBlock[];
   captureRef: RefObject<HTMLDivElement | null>;
 }) {
-  const first = days[0];
-  const last = days[days.length - 1];
-  const range =
-    first && last ? `${first.weekday} ${first.date} – ${last.weekday} ${last.date}` : "";
+  const days = groupClassesByDay(blocks);
+  const { startMin, endMin } = classTimeBounds(blocks);
+  const span = Math.max(60, endMin - startMin);
+  const hours: number[] = [];
+  for (let t = startMin; t < endMin; t += 60) hours.push(t);
+  const gridHeight = Math.max(220, (span / 60) * 52);
 
   return (
     <div
@@ -106,53 +34,160 @@ export function ScheduleExportSheet({
         position: "fixed",
         left: -12000,
         top: 0,
-        width: 900,
+        width: 1100,
         background: "#ffffff",
         color: "#171717",
-        padding: 36,
+        padding: 28,
         fontFamily: "ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif",
       }}
     >
       <div ref={captureRef} style={{ background: "#ffffff", color: "#171717", padding: 8 }}>
-        <p style={{ fontSize: 11, letterSpacing: "0.18em", textTransform: "uppercase", color: "#6b7280", margin: 0 }}>
+        <p
+          style={{
+            fontSize: 11,
+            letterSpacing: "0.18em",
+            textTransform: "uppercase",
+            color: "#6b7280",
+            margin: 0,
+          }}
+        >
           Flow
         </p>
-        <h1 style={{ fontSize: 28, fontWeight: 600, margin: "8px 0 4px" }}>Horario semanal</h1>
-        <p style={{ fontSize: 13, color: "#6b7280", margin: "0 0 20px" }}>{range} · 07:00–22:00</p>
-        <div style={{ display: "flex", gap: 10, fontSize: 11, color: "#6b7280", marginBottom: 20 }}>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-            <span style={{ width: 10, height: 10, background: "#171717", display: "inline-block", borderRadius: 2 }} />
-            Ocupado
-          </span>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-            <span style={{ width: 10, height: 10, background: "#99f6e4", display: "inline-block", borderRadius: 2 }} />
-            Libre
-          </span>
-        </div>
+        <h1 style={{ fontSize: 26, fontWeight: 600, margin: "8px 0 4px" }}>Horario de clases</h1>
+        <p style={{ fontSize: 13, color: "#6b7280", margin: "0 0 18px" }}>
+          Lunes a domingo
+          {blocks.length ? ` · ${blocks.length} clase${blocks.length === 1 ? "" : "s"}` : ""}
+        </p>
 
-        {days.map((day) => (
-          <section
-            key={day.date}
+        <div style={{ display: "flex", gap: 0 }}>
+          <div style={{ width: 44, position: "relative", height: gridHeight, marginTop: 28 }}>
+            {hours.map((hour) => (
+              <div
+                key={hour}
+                style={{
+                  position: "absolute",
+                  top: `${((hour - startMin) / span) * 100}%`,
+                  right: 6,
+                  fontSize: 10,
+                  color: "#6b7280",
+                  fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+                  transform: "translateY(-50%)",
+                }}
+              >
+                {formatHour(hour)}
+              </div>
+            ))}
+          </div>
+          <div
             style={{
-              marginBottom: 22,
-              paddingBottom: 18,
-              borderBottom: "1px solid #e5e7eb",
-              breakInside: "avoid",
+              flex: 1,
+              display: "grid",
+              gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
+              gap: 6,
             }}
           >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-              <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>
-                {day.heading}
-                {day.isToday ? " · Hoy" : ""}
-              </h2>
-            </div>
-            <p style={{ fontSize: 12, color: "#6b7280", margin: "4px 0 10px" }}>{day.summary}</p>
-            <Bar segments={day.parts.flatMap((part) => part.segments)} />
-            {day.parts.map((part) => (
-              <PartBlock key={part.part} part={part} />
+            {days.map((day) => (
+              <div key={day.dayOfWeek}>
+                <p
+                  style={{
+                    margin: "0 0 8px",
+                    textAlign: "center",
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: "#171717",
+                  }}
+                >
+                  {day.abbr}
+                </p>
+                <div
+                  style={{
+                    position: "relative",
+                    height: gridHeight,
+                    background: "#f9fafb",
+                    border: "1px solid #e5e7eb",
+                    borderRadius: 8,
+                    overflow: "hidden",
+                  }}
+                >
+                  {hours.map((hour) => (
+                    <div
+                      key={`${day.dayOfWeek}-${hour}`}
+                      style={{
+                        position: "absolute",
+                        left: 0,
+                        right: 0,
+                        top: `${((hour - startMin) / span) * 100}%`,
+                        borderTop: "1px solid #e5e7eb",
+                      }}
+                    />
+                  ))}
+                  {day.items.map((item) => {
+                    const start = timeToMinutes(item.startTime);
+                    const end = timeToMinutes(item.endTime);
+                    const top = ((start - startMin) / span) * 100;
+                    const height = Math.max(8, ((end - start) / span) * 100);
+                    return (
+                      <div
+                        key={`${item.title}-${item.startTime}`}
+                        style={{
+                          position: "absolute",
+                          left: 4,
+                          right: 4,
+                          top: `${top}%`,
+                          height: `${height}%`,
+                          background: "#0f766e",
+                          color: "#ffffff",
+                          borderRadius: 6,
+                          padding: "4px 6px",
+                          overflow: "hidden",
+                          boxSizing: "border-box",
+                        }}
+                      >
+                        <div style={{ fontSize: 11, fontWeight: 600, lineHeight: 1.2 }}>{item.title}</div>
+                        <div style={{ fontSize: 10, opacity: 0.9, marginTop: 2 }}>
+                          {item.startTime}–{item.endTime}
+                        </div>
+                        {item.location ? (
+                          <div style={{ fontSize: 10, opacity: 0.85, marginTop: 2 }}>{item.location}</div>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             ))}
-          </section>
-        ))}
+          </div>
+        </div>
+
+        <div style={{ marginTop: 22, display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12 }}>
+          {days
+            .filter((day) => day.items.length > 0)
+            .map((day) => (
+              <div key={`list-${day.dayOfWeek}`} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 12 }}>
+                <p style={{ margin: "0 0 8px", fontWeight: 600, fontSize: 13 }}>{day.label}</p>
+                {day.items.map((item) => (
+                  <div
+                    key={`${day.dayOfWeek}-${item.title}-${item.startTime}`}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: 12,
+                      fontSize: 12,
+                      marginBottom: 6,
+                    }}
+                  >
+                    <span>
+                      {item.title}
+                      {item.location ? ` · ${item.location}` : ""}
+                    </span>
+                    <span style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", color: "#6b7280" }}>
+                      {item.startTime}–{item.endTime}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ))}
+        </div>
       </div>
     </div>
   );

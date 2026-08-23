@@ -1,10 +1,12 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { FileDown, ImageDown } from "lucide-react";
 import { toast } from "sonner";
+import { ScheduleExportSheet } from "@/components/schedule-export-sheet";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -16,6 +18,7 @@ import {
 } from "@/components/ui/select";
 import type { ClassBlock } from "@/db/schema";
 import { ISO_DAY_LABELS } from "@/lib/datetime";
+import { saveSchedulePdf, saveSchedulePng } from "@/lib/schedule-export";
 
 const days = [1, 2, 3, 4, 5, 6, 7];
 
@@ -27,6 +30,8 @@ export function ClassScheduleEditor({ initial }: { initial: ClassBlock[] }) {
   const [endTime, setEndTime] = useState("10:00");
   const [location, setLocation] = useState("");
   const [pending, setPending] = useState(false);
+  const [exporting, setExporting] = useState<"png" | "pdf" | null>(null);
+  const exportRef = useRef<HTMLDivElement>(null);
   const blocks = [...initial].sort((a, b) => {
     if (a.dayOfWeek !== b.dayOfWeek) return a.dayOfWeek - b.dayOfWeek;
     return a.startTime.localeCompare(b.startTime);
@@ -54,6 +59,24 @@ export function ClassScheduleEditor({ initial }: { initial: ClassBlock[] }) {
     }
   }
 
+  async function exportSchedule(kind: "png" | "pdf") {
+    const node = exportRef.current;
+    if (!node) {
+      toast.error("No pude preparar el horario para exportar.");
+      return;
+    }
+    setExporting(kind);
+    try {
+      if (kind === "png") await saveSchedulePng(node);
+      else await saveSchedulePdf(node);
+      toast.success(kind === "png" ? "Imagen descargada." : "PDF descargado.");
+    } catch {
+      toast.error("No pude exportar el horario. Inténtalo de nuevo.");
+    } finally {
+      setExporting(null);
+    }
+  }
+
   async function remove(id: string) {
     const response = await fetch(`/api/classes?id=${id}`, { method: "DELETE" });
     if (!response.ok) {
@@ -65,7 +88,8 @@ export function ClassScheduleEditor({ initial }: { initial: ClassBlock[] }) {
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[1fr_1.2fr]">
+    <>
+      <div className="grid gap-4 lg:grid-cols-[1fr_1.2fr]">
       <Card>
         <CardHeader>
           <CardTitle>Nueva clase</CardTitle>
@@ -114,6 +138,30 @@ export function ClassScheduleEditor({ initial }: { initial: ClassBlock[] }) {
       <Card>
         <CardHeader>
           <CardTitle>Semana</CardTitle>
+          <CardAction className="flex gap-1">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              aria-label="Exportar horario como imagen"
+              disabled={exporting !== null}
+              onClick={() => void exportSchedule("png")}
+            >
+              <ImageDown />
+              {exporting === "png" ? "Preparando…" : "Imagen"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              aria-label="Exportar horario como PDF"
+              disabled={exporting !== null}
+              onClick={() => void exportSchedule("pdf")}
+            >
+              <FileDown />
+              {exporting === "pdf" ? "Preparando…" : "PDF"}
+            </Button>
+          </CardAction>
         </CardHeader>
         <CardContent>
           {blocks.length === 0 ? (
@@ -138,6 +186,8 @@ export function ClassScheduleEditor({ initial }: { initial: ClassBlock[] }) {
           )}
         </CardContent>
       </Card>
-    </div>
+      </div>
+      <ScheduleExportSheet blocks={blocks} captureRef={exportRef} />
+    </>
   );
 }

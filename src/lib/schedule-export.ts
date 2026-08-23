@@ -1,11 +1,54 @@
 "use client";
 
-import type { ScheduleDay } from "@/lib/day-plan";
+import { ISO_DAY_ABBR, ISO_DAY_LABELS, parseHm } from "@/lib/datetime";
 
-export function weekFileStem(days: ScheduleDay[]): string {
-  const first = days[0]?.date ?? "semana";
-  const last = days[days.length - 1]?.date ?? first;
-  return `horario-flow-${first}_${last}`;
+export const CLASS_SCHEDULE_STEM = "horario-clases-flow";
+
+export type ClassExportBlock = {
+  title: string;
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+  location?: string | null;
+};
+
+export type ClassExportDay = {
+  dayOfWeek: number;
+  label: string;
+  abbr: string;
+  items: ClassExportBlock[];
+};
+
+const WEEK_DAYS = [1, 2, 3, 4, 5, 6, 7] as const;
+
+export function timeToMinutes(value: string): number {
+  const { hours, minutes } = parseHm(value);
+  return hours * 60 + minutes;
+}
+
+export function groupClassesByDay(blocks: ClassExportBlock[]): ClassExportDay[] {
+  return WEEK_DAYS.map((dayOfWeek) => ({
+    dayOfWeek,
+    label: ISO_DAY_LABELS[dayOfWeek] ?? `Día ${dayOfWeek}`,
+    abbr: ISO_DAY_ABBR[dayOfWeek] ?? String(dayOfWeek),
+    items: blocks
+      .filter((block) => block.dayOfWeek === dayOfWeek)
+      .slice()
+      .sort((a, b) => a.startTime.localeCompare(b.startTime) || a.endTime.localeCompare(b.endTime)),
+  }));
+}
+
+export function classTimeBounds(blocks: ClassExportBlock[]): { startMin: number; endMin: number } {
+  if (blocks.length === 0) return { startMin: 8 * 60, endMin: 16 * 60 };
+  let startMin = Infinity;
+  let endMin = 0;
+  for (const block of blocks) {
+    startMin = Math.min(startMin, timeToMinutes(block.startTime));
+    endMin = Math.max(endMin, timeToMinutes(block.endTime));
+  }
+  const startHour = Math.floor(startMin / 60) * 60;
+  const endHour = Math.max(startHour + 60, Math.ceil(endMin / 60) * 60);
+  return { startMin: startHour, endMin: endHour };
 }
 
 function downloadBlob(dataUrl: string, filename: string) {
@@ -29,12 +72,12 @@ export async function captureNodePng(node: HTMLElement): Promise<string> {
   });
 }
 
-export async function saveSchedulePng(node: HTMLElement, days: ScheduleDay[]) {
+export async function saveSchedulePng(node: HTMLElement, stem = CLASS_SCHEDULE_STEM) {
   const dataUrl = await captureNodePng(node);
-  downloadBlob(dataUrl, `${weekFileStem(days)}.png`);
+  downloadBlob(dataUrl, `${stem}.png`);
 }
 
-export async function saveSchedulePdf(node: HTMLElement, days: ScheduleDay[]) {
+export async function saveSchedulePdf(node: HTMLElement, stem = CLASS_SCHEDULE_STEM) {
   const dataUrl = await captureNodePng(node);
   const img = new Image();
   await new Promise<void>((resolve, reject) => {
@@ -44,8 +87,8 @@ export async function saveSchedulePdf(node: HTMLElement, days: ScheduleDay[]) {
   });
 
   const { jsPDF } = await import("jspdf");
-  const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-  const margin = 10;
+  const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+  const margin = 8;
   const pageW = pdf.internal.pageSize.getWidth();
   const pageH = pdf.internal.pageSize.getHeight();
   const usableW = pageW - margin * 2;
@@ -77,5 +120,5 @@ export async function saveSchedulePdf(node: HTMLElement, days: ScheduleDay[]) {
     }
   }
 
-  pdf.save(`${weekFileStem(days)}.pdf`);
+  pdf.save(`${stem}.pdf`);
 }
