@@ -1,47 +1,128 @@
-import { addDays, getISODay } from "date-fns";
+import { getISODay } from "date-fns";
 import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
+import { es } from "date-fns/locale";
 import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { users, type ClassBlock, type Item } from "@/db/schema";
 import { listCalendarBusy } from "./calendar/google";
 import { listClassBlocks } from "./classes";
 import { buildDayPlans, toScheduleDays, type DayPlan, type ScheduleDay } from "./day-plan";
-import { DEFAULT_TIMEZONE, ISO_DAY_LABELS, weekDateRange } from "./datetime";
+import {
+  DEFAULT_TIMEZONE,
+  ISO_DAY_LABELS,
+  formatMonthTitle,
+  formatWeekSpan,
+  isIsoDate,
+  monthGridRange,
+  weekContaining,
+} from "./datetime";
 import { isCalendarConnected } from "./google-token";
 import { listItems } from "./items";
 
-export type DashboardData = {
-  userName: string | null;
-  timeZone: string;
+export type ScheduleData = {
   today: string;
+  timeZone: string;
+  weekDays: ScheduleDay[];
+  monthDays: ScheduleDay[];
+  weekLabel: string;
+  monthLabel: string;
+  month: string;
+};
+
+export type DashboardData = ScheduleData & {
+  userName: string | null;
   calendarConnected: boolean;
   todayLabel: string;
   todayClasses: Array<ClassBlock & { when: string }>;
   todayItems: Item[];
   upcoming: Item[];
   todayPlan: DayPlan | null;
-  weekDays: ScheduleDay[];
 };
 
-export async function getDashboardData(userId: string): Promise<DashboardData> {
+async function loadUserContext(userId: string) {
   const db = getDb();
   const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
-  const timeZone = user?.timezone || DEFAULT_TIMEZONE;
+  return {
+    user,
+    timeZone: user?.timezone || DEFAULT_TIMEZONE,
+  };
+}
+
+export async function getScheduleData(userId: string, dateStr?: string): Promise<ScheduleData> {
+  const { timeZone } = await loadUserContext(userId);
   const now = new Date();
-  const week = weekDateRange(now, timeZone);
-  const rangeEnd = addDays(now, 7);
-  const calendarFrom = week.start < now ? week.start : now;
+  const todayStr = formatInTimeZone(now, timeZone, "yyyy-MM-dd");
+  const anchor = dateStr && isIsoDate(dateStr) ? dateStr : todayStr;
+  const week = weekContaining(anchor, timeZone);
+  const month = monthGridRange(anchor, timeZone);
+  const from = week.start < month.start ? week.start : month.start;
+  const to = week.end > month.end ? week.end : month.end;
+
+  const [allItems, classes, calendarBusy] = await Promise.all([
+    listItems(userId),
+    listClassBlocks(userId),
+    listCalendarBusy(userId, from, to).catch(() => []),
+  ]);
+
+  const pending = allItems.filter((item) => item.status === "pending");
+  const plans = buildDayPlans({
+    from,
+    to,
+    now,
+    timeZone,
+    classBlocks: classes,
+    items: pending,
+    calendarBusy,
+  });
+  const allDays = toScheduleDays(plans, todayStr, timeZone);
+  const weekStart = formatInTimeZone(week.start, timeZone, "yyyy-MM-dd");
+  const weekEnd = formatInTimeZone(week.end, timeZone, "yyyy-MM-dd");
+  const monthStart = formatInTimeZone(month.start, timeZone, "yyyy-MM-dd");
+  const monthEnd = formatInTimeZone(month.end, timeZone, "yyyy-MM-dd");
+
+  return {
+    today: todayStr,
+    timeZone,
+    weekDays: allDays.filter((day) => day.date >= weekStart && day.date <= weekEnd),
+    monthDays: allDays.filter((day) => day.date >= monthStart && day.date <= monthEnd),
+    weekLabel: formatWeekSpan(week.start, week.end, timeZone),
+    monthLabel: formatMonthTitle(anchor, timeZone),
+    month: month.month,
+  };
+}
+
+export async function getDashboardData(userId: string): Promise<DashboardData> {
+  const { user, timeZone } = await loadUserContext(userId);
+  const now = new Date();
+  const todayStr = formatInTimeZone(now, timeZone, "yyyy-MM-dd");
+  const week = weekContaining(todayStr, timeZone);
+  const month = monthGridRange(todayStr, timeZone);
+  const from = week.start < month.start ? week.start : month.start;
+  const to = week.end > month.end ? week.end : month.end;
+  const isoDay = getISODay(fromZonedTime(`${todayStr}T12:00:00`, timeZone));
 
   const [allItems, classes, calendarConnected, calendarBusy] = await Promise.all([
     listItems(userId),
     listClassBlocks(userId),
     isCalendarConnected(userId),
-    listCalendarBusy(userId, calendarFrom, rangeEnd > week.end ? rangeEnd : week.end).catch(() => []),
+    listCalendarBusy(userId, from, to).catch(() => []),
   ]);
 
   const pending = allItems.filter((item) => item.status === "pending");
-  const todayStr = formatInTimeZone(now, timeZone, "yyyy-MM-dd");
-  const isoDay = getISODay(fromZonedTime(`${todayStr}T12:00:00`, timeZone));
+  const plans = buildDayPlans({
+    from,
+    to,
+    now,
+    timeZone,
+    classBlocks: classes,
+    items: pending,
+    calendarBusy,
+  });
+  const allDays = toScheduleDays(plans, todayStr, timeZone);
+  const weekStart = formatInTimeZone(week.start, timeZone, "yyyy-MM-dd");
+  const weekEnd = formatInTimeZone(week.end, timeZone, "yyyy-MM-dd");
+  const monthStart = formatInTimeZone(month.start, timeZone, "yyyy-MM-dd");
+  const monthEnd = formatInTimeZone(month.end, timeZone, "yyyy-MM-dd");
 
   const todayClasses = classes
     .filter((block) => block.dayOfWeek === isoDay)
@@ -61,26 +142,20 @@ export async function getDashboardData(userId: string): Promise<DashboardData> {
     .filter((item) => item.dueAt && (item.type === "assignment" || item.type === "exam" || item.type === "task"))
     .sort((a, b) => (a.dueAt?.getTime() ?? 0) - (b.dueAt?.getTime() ?? 0));
 
-  const days = buildDayPlans({
-    from: week.start,
-    to: week.end,
-    now,
-    timeZone,
-    classBlocks: classes,
-    items: pending,
-    calendarBusy,
-  });
-
   return {
     userName: user?.name ?? null,
     timeZone,
     today: todayStr,
     calendarConnected,
-    todayLabel: `${ISO_DAY_LABELS[isoDay] ?? ""} ${formatInTimeZone(now, timeZone, "d MMM")}`,
+    todayLabel: `${ISO_DAY_LABELS[isoDay] ?? ""} ${formatInTimeZone(now, timeZone, "d MMM", { locale: es })}`,
     todayClasses,
     todayItems,
     upcoming,
-    todayPlan: days.find((day) => day.isToday) ?? days[0] ?? null,
-    weekDays: toScheduleDays(days, todayStr, timeZone),
+    todayPlan: plans.find((day) => day.isToday) ?? plans[0] ?? null,
+    weekDays: allDays.filter((day) => day.date >= weekStart && day.date <= weekEnd),
+    monthDays: allDays.filter((day) => day.date >= monthStart && day.date <= monthEnd),
+    weekLabel: formatWeekSpan(week.start, week.end, timeZone),
+    monthLabel: formatMonthTitle(todayStr, timeZone),
+    month: month.month,
   };
 }

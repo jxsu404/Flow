@@ -41,6 +41,7 @@ export type DaySegment =
       partLabel: string;
       title: string;
       kind: string;
+      location?: string | null;
     };
 
 export type DayPlan = {
@@ -60,6 +61,7 @@ export type ScheduleSegment = {
   suggestionTitle?: string | null;
   suggestionDue?: string | null;
   suggestionType?: SuggestedWork["type"] | null;
+  location?: string | null;
   startMin: number;
   durationMin: number;
 };
@@ -105,6 +107,7 @@ export function toScheduleDays(plans: DayPlan[], today: string, timeZone: string
             suggestionTitle: segment.type === "free" ? segment.suggestion?.title ?? null : null,
             suggestionDue: segment.type === "free" ? segment.suggestion?.dueLabel ?? null : null,
             suggestionType: segment.type === "free" ? segment.suggestion?.type ?? null : null,
+            location: segment.type === "busy" ? segment.location : undefined,
             startMin,
             durationMin: Math.max(1, endMin - startMin),
           };
@@ -278,7 +281,9 @@ export function buildDayPlans(input: {
   to: Date;
   now?: Date;
   timeZone: string;
-  classBlocks: Pick<ClassBlock, "title" | "dayOfWeek" | "startTime" | "endTime">[];
+  classBlocks: Array<
+    Pick<ClassBlock, "title" | "dayOfWeek" | "startTime" | "endTime"> & { location?: string | null }
+  >;
   items: Item[];
   calendarBusy: Interval[];
 }): DayPlan[] {
@@ -306,6 +311,7 @@ export function buildDayPlans(input: {
           partLabel: part.label,
           title: clipped.title ?? "Ocupado",
           kind: clipped.kind ?? "event",
+          location: clipped.location ?? null,
         });
       }
     }

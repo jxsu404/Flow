@@ -1,5 +1,6 @@
-import { addDays, getISODay } from "date-fns";
+import { addDays, addMonths, getISODay } from "date-fns";
 import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
+import { es } from "date-fns/locale";
 
 export const DEFAULT_TIMEZONE = "America/Costa_Rica";
 
@@ -63,6 +64,65 @@ export function weekDateRange(now: Date, timeZone: string): { start: Date; end: 
   return {
     start: fromZonedTime(`${monday}T00:00:00`, timeZone),
     end: fromZonedTime(`${sunday}T23:59:59`, timeZone),
+  };
+}
+
+export function weekContaining(dateStr: string, timeZone: string): { start: Date; end: Date } {
+  const noon = fromZonedTime(`${dateStr}T12:00:00`, timeZone);
+  return weekDateRange(noon, timeZone);
+}
+
+export function monthGridRange(dateStr: string, timeZone: string): {
+  start: Date;
+  end: Date;
+  month: string;
+} {
+  const noon = fromZonedTime(`${dateStr}T12:00:00`, timeZone);
+  const month = formatInTimeZone(noon, timeZone, "yyyy-MM");
+  const monthStart = fromZonedTime(`${month}-01T12:00:00`, timeZone);
+  const leading = getISODay(monthStart) - 1;
+  const gridStartNoon = addDays(monthStart, -leading);
+  const gridEndNoon = addDays(gridStartNoon, 41);
+  const startStr = formatInTimeZone(gridStartNoon, timeZone, "yyyy-MM-dd");
+  const endStr = formatInTimeZone(gridEndNoon, timeZone, "yyyy-MM-dd");
+  return {
+    start: fromZonedTime(`${startStr}T00:00:00`, timeZone),
+    end: fromZonedTime(`${endStr}T23:59:59`, timeZone),
+    month,
+  };
+}
+
+export function isIsoDate(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+export function addCalendarDays(dateStr: string, amount: number, timeZone: string): string {
+  const noon = fromZonedTime(`${dateStr}T12:00:00`, timeZone);
+  return formatInTimeZone(addDays(noon, amount), timeZone, "yyyy-MM-dd");
+}
+
+export function addCalendarMonths(dateStr: string, amount: number, timeZone: string): string {
+  const noon = fromZonedTime(`${dateStr}T12:00:00`, timeZone);
+  return formatInTimeZone(addMonths(noon, amount), timeZone, "yyyy-MM-dd");
+}
+
+export function formatWeekSpan(start: Date, end: Date, timeZone: string): string {
+  const startDay = formatInTimeZone(start, timeZone, "d", { locale: es });
+  const endLabel = formatInTimeZone(end, timeZone, "d MMM", { locale: es });
+  return `${startDay} – ${endLabel}`;
+}
+
+export function formatMonthTitle(dateStr: string, timeZone: string): string {
+  const noon = fromZonedTime(`${dateStr}T12:00:00`, timeZone);
+  const raw = formatInTimeZone(noon, timeZone, "MMMM yyyy", { locale: es });
+  return raw.charAt(0).toUpperCase() + raw.slice(1);
+}
+
+export function dayColumnLabel(dateStr: string, timeZone: string): { abbr: string; day: string } {
+  const noon = fromZonedTime(`${dateStr}T12:00:00`, timeZone);
+  return {
+    abbr: ISO_DAY_ABBR[getISODay(noon)] ?? "",
+    day: formatInTimeZone(noon, timeZone, "d"),
   };
 }
 

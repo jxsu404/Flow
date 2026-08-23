@@ -1,10 +1,26 @@
 "use client";
 
-import { useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { useMemo, useState } from "react";
+import { CalendarDays, ChevronLeft, ChevronRight, Sparkles } from "lucide-react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import type { ScheduleDay, SchedulePart, ScheduleSegment } from "@/lib/day-plan";
+import {
+  HOUR_HEIGHT,
+  blockLayout,
+  busyBlocksFromDay,
+  dayHasBusy,
+  formatHour,
+  gridHours,
+  legendFromDays,
+  occupancy,
+  type CalendarBlock,
+} from "@/lib/calendar-grid";
+import type { ScheduleData } from "@/lib/dashboard";
+import { addCalendarDays, addCalendarMonths, dayColumnLabel } from "@/lib/datetime";
+import type { ScheduleDay } from "@/lib/day-plan";
+import { subjectTone } from "@/lib/subject-color";
 import { cn } from "@/lib/utils";
 
 const busyKindLabel: Record<string, string> = {
@@ -16,150 +32,285 @@ const busyKindLabel: Record<string, string> = {
   task: "Tarea",
 };
 
-const AWAKE_MINUTES = 15 * 60;
-
 function compactRange(label: string) {
   return label.replace(/ – /g, "–");
 }
 
-function suggestionLine(segment: ScheduleSegment) {
-  if (!segment.suggestionTitle) return null;
-  const verb = segment.suggestionType === "assignment" ? "adelantar" : "avanzar";
-  return `Puedes usar este tiempo para ${verb} ${segment.suggestionTitle}${segment.suggestionDue ? ` · ${segment.suggestionDue}` : ""}.`;
-}
-
-function TimelineBar({ segments }: { segments: ScheduleSegment[] }) {
-  const filled = segments.map((segment) => ({
-    ...segment,
-    left: Math.max(0, (segment.startMin / AWAKE_MINUTES) * 100),
-    width: Math.max(1.2, (segment.durationMin / AWAKE_MINUTES) * 100),
-  }));
+function EventBlock({ block }: { block: CalendarBlock }) {
+  const layout = blockLayout(block);
+  if (layout.hidden) return null;
+  const tone = subjectTone(block.title, block.kind);
+  const showMeta = layout.height >= 56;
+  const showLocation = layout.height >= 72 && block.location;
+  const kind = busyKindLabel[block.kind];
 
   return (
-    <div className="relative h-5 overflow-hidden rounded-md bg-muted/60 ring-1 ring-foreground/10">
-      {filled.map((segment) => (
+    <div
+      className={cn(
+        "absolute inset-x-1 overflow-hidden rounded-lg border px-1.5 py-1 leading-tight",
+        tone.block,
+        block.kind !== "class" && "ring-1 ring-inset ring-white/10",
+      )}
+      style={{ top: layout.top, height: layout.height }}
+      title={[block.title, compactRange(block.rangeLabel), block.location, kind]
+        .filter(Boolean)
+        .join(" · ")}
+    >
+      <p className="truncate text-xs font-medium">{block.title}</p>
+      {showMeta ? (
+        <p className="mt-0.5 font-mono text-[11px] tabular-nums opacity-80">
+          {compactRange(block.rangeLabel)}
+        </p>
+      ) : null}
+      {showLocation ? <p className="mt-0.5 truncate text-[11px] opacity-75">{block.location}</p> : null}
+      {showMeta && block.kind !== "class" && kind ? (
+        <p className="mt-0.5 text-[11px] uppercase tracking-wide opacity-70">{kind}</p>
+      ) : null}
+    </div>
+  );
+}
+
+function DayBody({ day, hours }: { day: ScheduleDay; hours: number[] }) {
+  const blocks = busyBlocksFromDay(day);
+  const emptyToday = day.isToday && !dayHasBusy(day);
+
+  return (
+    <div
+      className={cn("relative min-w-0 border-l border-border/40", day.isToday && "bg-primary/4")}
+      style={{ height: hours.length * HOUR_HEIGHT }}
+    >
+      {hours.map((hour) => (
         <div
-          key={`${segment.type}-${segment.rangeLabel}`}
-          title={`${segment.title} ${segment.rangeLabel}`}
-          className={cn(
-            "absolute top-0 h-full",
-            segment.type === "busy" ? "bg-foreground/80" : "bg-primary/25",
-          )}
-          style={{ left: `${segment.left}%`, width: `${segment.width}%` }}
+          key={`${day.date}-${hour}`}
+          className="border-t border-border/30"
+          style={{ height: HOUR_HEIGHT }}
         />
+      ))}
+      {blocks.map((block) => (
+        <EventBlock key={`${block.title}-${block.startMin}-${block.kind}`} block={block} />
+      ))}
+      {emptyToday ? (
+        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 px-3 text-center">
+          <Sparkles className="size-5 text-primary/80" />
+          <p className="text-xs leading-snug text-muted-foreground">Tu día está bastante libre.</p>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function WeekGrid({ days, timeZone }: { days: ScheduleDay[]; timeZone: string }) {
+  const hours = gridHours();
+
+  return (
+    <div className="-mx-1 overflow-x-auto pb-1">
+      <div className="min-w-[760px] px-1">
+        <div className="grid" style={{ gridTemplateColumns: `3.25rem repeat(${days.length}, minmax(5.5rem, 1fr))` }}>
+          <div />
+          {days.map((day) => {
+            const stats = occupancy(day);
+            const label = dayColumnLabel(day.date, timeZone);
+            return (
+              <div
+                key={`head-${day.date}`}
+                className={cn(
+                  "flex flex-col items-center rounded-t-lg px-1 py-2",
+                  day.isToday && "bg-primary/8 ring-1 ring-inset ring-primary/35",
+                )}
+              >
+                <p className={cn("text-xs font-medium", day.isToday ? "text-primary" : "text-muted-foreground")}>
+                  {label.abbr} {label.day}
+                </p>
+                {day.isToday ? (
+                  <Badge variant="secondary" className="mt-1 h-5 bg-primary/15 px-1.5 text-[10px] text-primary">
+                    Hoy
+                  </Badge>
+                ) : (
+                  <span className="mt-1 h-5" />
+                )}
+                <div className="mt-1.5 h-1 w-full max-w-14 overflow-hidden rounded-full bg-muted">
+                  <div className="h-full rounded-full bg-primary/70" style={{ width: `${stats.pct}%` }} />
+                </div>
+              </div>
+            );
+          })}
+          <div className="flex flex-col">
+            {hours.map((hour) => (
+              <div
+                key={hour}
+                className="pr-2 text-right font-mono text-[11px] tabular-nums text-muted-foreground"
+                style={{ height: HOUR_HEIGHT }}
+              >
+                <span className="-translate-y-2 block">{formatHour(hour)}</span>
+              </div>
+            ))}
+          </div>
+          {days.map((day) => (
+            <DayBody key={day.date} day={day} hours={hours} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MonthCell({
+  day,
+  inMonth,
+}: {
+  day: ScheduleDay;
+  inMonth: boolean;
+}) {
+  const blocks = busyBlocksFromDay(day);
+  const shown = blocks.slice(0, 3);
+  const extra = blocks.length - shown.length;
+  const dateNum = day.date.slice(8).replace(/^0/, "");
+
+  return (
+    <div
+      className={cn(
+        "flex min-h-[7.5rem] flex-col gap-1 rounded-lg p-1.5 ring-1 ring-border/50",
+        day.isToday && "bg-primary/8 ring-primary/40",
+        !inMonth && "opacity-40",
+      )}
+    >
+      <div className="flex items-center justify-between">
+        <span className={cn("text-xs font-medium", day.isToday && "text-primary")}>{dateNum}</span>
+        {day.isToday ? <span className="text-[10px] font-medium text-primary">Hoy</span> : null}
+      </div>
+      <div className="flex flex-col gap-1">
+        {shown.map((block) => {
+          const tone = subjectTone(block.title, block.kind);
+          return (
+            <div
+              key={`${block.title}-${block.startMin}`}
+              className={cn("truncate rounded-md border px-1.5 py-0.5 text-xs leading-tight", tone.block)}
+              title={`${block.title} · ${compactRange(block.rangeLabel)}`}
+            >
+              {block.title}
+            </div>
+          );
+        })}
+        {extra > 0 ? <p className="text-xs text-muted-foreground">+{extra} más</p> : null}
+      </div>
+    </div>
+  );
+}
+
+function MonthGrid({ days, month }: { days: ScheduleDay[]; month: string }) {
+  const labels = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="grid grid-cols-7 gap-1.5">
+        {labels.map((label) => (
+          <p key={label} className="px-1 text-xs font-medium text-muted-foreground">
+            {label}
+          </p>
+        ))}
+      </div>
+      <div className="grid grid-cols-7 gap-1.5">
+        {days.map((day) => (
+          <MonthCell key={day.date} day={day} inMonth={day.date.startsWith(month)} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Legend({ days }: { days: ScheduleDay[] }) {
+  const items = legendFromDays(days);
+  if (items.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-x-3 gap-y-1.5 pt-1">
+      {items.map((item) => (
+        <div key={item.key} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <span className={cn("size-2 rounded-full", item.tone.swatch)} />
+          <span>{item.label}</span>
+        </div>
       ))}
     </div>
   );
 }
 
-function FreeDetail({ segment }: { segment: ScheduleSegment }) {
-  return (
-    <div className="py-0.5">
-      <p className="text-sm text-muted-foreground">
-        Libre · {compactRange(segment.rangeLabel)}
-      </p>
-      {segment.suggestionTitle ? (
-        <p className="mt-0.5 text-xs text-muted-foreground">{suggestionLine(segment)}</p>
-      ) : null}
-    </div>
-  );
-}
+type ViewMode = "week" | "month";
 
-function PartAccordion({ part }: { part: SchedulePart }) {
-  const [open, setOpen] = useState(false);
-  const freeCount = part.segments.filter((segment) => segment.type === "free").length;
-  const busyCount = part.segments.length - freeCount;
-  const summary = [
-    busyCount ? `${busyCount} ocupado${busyCount === 1 ? "" : "s"}` : null,
-    freeCount ? `${freeCount} libre${freeCount === 1 ? "" : "s"}` : null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+export function WeekSchedule({
+  weekDays: initialWeekDays,
+  monthDays: initialMonthDays,
+  today,
+  timeZone,
+  weekLabel: initialWeekLabel,
+  monthLabel: initialMonthLabel,
+  month: initialMonth,
+}: {
+  weekDays: ScheduleDay[];
+  monthDays: ScheduleDay[];
+  today: string;
+  timeZone: string;
+  weekLabel: string;
+  monthLabel: string;
+  month: string;
+}) {
+  const [view, setView] = useState<ViewMode>("week");
+  const [nav, setNav] = useState<ScheduleData | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  return (
-    <div className="rounded-lg ring-1 ring-foreground/10">
-      <button
-        type="button"
-        aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
-        className="flex w-full items-center gap-3 px-3 py-2 text-left"
-      >
-        <div className="min-w-0 flex-1">
-          <div className="flex items-baseline justify-between gap-3">
-            <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{part.part}</p>
-            <p className="shrink-0 font-mono text-xs tabular-nums text-muted-foreground">
-              {compactRange(part.rangeLabel)}
-            </p>
-          </div>
-          <p className="mt-0.5 text-xs text-muted-foreground">{summary || "Sin bloques"}</p>
-        </div>
-        <ChevronDown
-          className={cn("size-4 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")}
-        />
-      </button>
-      {open ? (
-        <div className="flex flex-col gap-1.5 border-t border-border/50 px-3 py-2.5">
-          <TimelineBar segments={part.segments} />
-          {part.segments.map((segment) =>
-            segment.type === "free" ? (
-              <FreeDetail key={`${segment.type}-${segment.rangeLabel}`} segment={segment} />
-            ) : (
-              <div key={`${segment.type}-${segment.rangeLabel}`} className="rounded-lg bg-secondary px-2.5 py-1.5">
-                <div className="flex items-baseline justify-between gap-3">
-                  <p className="text-sm font-medium leading-snug">{segment.title}</p>
-                  <p className="shrink-0 font-mono text-xs tabular-nums text-muted-foreground">
-                    {compactRange(segment.rangeLabel)}
-                  </p>
-                </div>
-                {segment.kind ? (
-                  <p className="mt-0.5 text-xs text-muted-foreground">
-                    {busyKindLabel[segment.kind] ?? segment.kind}
-                  </p>
-                ) : null}
-              </div>
-            ),
-          )}
-        </div>
-      ) : null}
-    </div>
-  );
-}
+  const weekDays = nav?.weekDays ?? initialWeekDays;
+  const monthDays = nav?.monthDays ?? initialMonthDays;
+  const weekLabel = nav?.weekLabel ?? initialWeekLabel;
+  const monthLabel = nav?.monthLabel ?? initialMonthLabel;
+  const month = nav?.month ?? initialMonth;
+  const anchor = view === "week" ? (weekDays[0]?.date ?? today) : `${month}-15`;
 
-function PartRow({ part }: { part: SchedulePart }) {
-  const allFree = part.segments.every((segment) => segment.type === "free");
-  if (allFree) {
-    const suggestion = part.segments.find((segment) => segment.suggestionTitle);
-    return (
-      <div className="py-0.5">
-        <p className="text-sm">
-          <span className="font-medium">{part.part}</span>
-          <span className="text-muted-foreground">
-            {" "}
-            · Libre · {compactRange(part.rangeLabel)}
-          </span>
-        </p>
-        {suggestion?.suggestionTitle ? (
-          <p className="mt-0.5 text-xs text-muted-foreground">{suggestionLine(suggestion)}</p>
-        ) : null}
-      </div>
-    );
+  async function load(date: string) {
+    if (date === today) {
+      setNav(null);
+      return;
+    }
+    setLoading(true);
+    try {
+      const response = await fetch(`/api/schedule?date=${date}`);
+      const data = (await response.json()) as ScheduleData & { error?: string };
+      if (!response.ok) {
+        toast.error(data.error ?? "No pude cargar el horario");
+        return;
+      }
+      setNav(data);
+    } catch {
+      toast.error("Error de red al cargar el horario");
+    } finally {
+      setLoading(false);
+    }
   }
-  return <PartAccordion part={part} />;
-}
 
-export function WeekSchedule({ days }: { days: ScheduleDay[] }) {
-  const today = days.find((day) => day.isToday) ?? days[0];
-  const [selected, setSelected] = useState(today?.date ?? days[0]?.date ?? "");
-  const day = days.find((item) => item.date === selected) ?? today;
+  function goToday() {
+    setView("week");
+    setNav(null);
+  }
 
-  if (!day) {
+  function goPrev() {
+    if (view === "week") void load(addCalendarDays(anchor, -7, timeZone));
+    else void load(addCalendarMonths(`${month}-15`, -1, timeZone));
+  }
+
+  function goNext() {
+    if (view === "week") void load(addCalendarDays(anchor, 7, timeZone));
+    else void load(addCalendarMonths(`${month}-15`, 1, timeZone));
+  }
+
+  const periodLabel = view === "week" ? weekLabel : monthLabel;
+  const legendDays = view === "week" ? weekDays : monthDays;
+
+  const paddedWeek = useMemo(() => weekDays.slice(0, 7), [weekDays]);
+
+  if (paddedWeek.length === 0 && monthDays.length === 0) {
     return (
-      <Card className="lg:col-span-2">
+      <Card>
         <CardHeader>
           <CardTitle className="text-[17px]">Horario</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-muted-foreground">No hay días en esta semana.</p>
+          <p className="text-sm text-muted-foreground">No hay días en este periodo.</p>
         </CardContent>
       </Card>
     );
@@ -167,56 +318,86 @@ export function WeekSchedule({ days }: { days: ScheduleDay[] }) {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="text-[17px]">Horario</CardTitle>
-        <CardDescription>Resumen de la semana. Despliega un bloque si quieres el detalle.</CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-3">
-        <div className="grid grid-cols-7 gap-1">
-          {days.map((item) => (
+      <CardHeader className="gap-3 sm:grid-cols-[1fr_auto]">
+        <div>
+          <CardTitle className="flex items-center gap-2 text-[17px]">
+            <CalendarDays className="size-4 text-muted-foreground" />
+            Horario
+          </CardTitle>
+          <CardDescription>
+            {view === "week"
+              ? "Clases, tareas y eventos en su hora."
+              : "Resumen del mes: clases, tareas y exámenes."}
+          </CardDescription>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+          <div className="inline-flex rounded-lg bg-muted p-0.5">
             <button
-              key={item.date}
               type="button"
-              onClick={() => setSelected(item.date)}
+              aria-pressed={view === "week"}
+              onClick={() => setView("week")}
               className={cn(
-                "flex flex-col items-center rounded-lg px-1 py-1.5 text-center transition-colors",
-                item.date === selected
+                "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                view === "week"
                   ? "bg-primary text-primary-foreground"
-                  : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
+                  : "text-muted-foreground hover:text-foreground",
               )}
             >
-              <span className="text-xs font-medium">{item.weekday.slice(0, 3)}</span>
-              {item.isToday ? (
-                <Badge
-                  variant="secondary"
-                  className={cn(
-                    "mt-0.5 h-5 px-1.5 text-xs",
-                    item.date === selected && "bg-primary-foreground/20 text-primary-foreground",
-                  )}
-                >
-                  Hoy
-                </Badge>
-              ) : (
-                <span className="mt-0.5 text-xs opacity-70">{item.date.slice(8)}</span>
-              )}
+              Semana
             </button>
-          ))}
+            <button
+              type="button"
+              aria-pressed={view === "month"}
+              onClick={() => setView("month")}
+              className={cn(
+                "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                view === "month"
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              Mes
+            </button>
+          </div>
+          <div className="flex items-center gap-1">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              onClick={goPrev}
+              disabled={loading}
+              aria-label={view === "week" ? "Semana anterior" : "Mes anterior"}
+            >
+              <ChevronLeft />
+            </Button>
+            <p className="min-w-[6.5rem] text-center text-xs font-medium tabular-nums">{periodLabel}</p>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              onClick={goNext}
+              disabled={loading}
+              aria-label={view === "week" ? "Semana siguiente" : "Mes siguiente"}
+            >
+              <ChevronRight />
+            </Button>
+            <Button type="button" variant="outline" size="sm" onClick={goToday} disabled={loading}>
+              Hoy
+            </Button>
+          </div>
         </div>
-
-        <div>
-          <p className="text-sm font-medium">{day.heading}</p>
-          <p className="mt-0.5 text-xs text-muted-foreground">{day.summary}</p>
-        </div>
-
-        <TimelineBar segments={day.parts.flatMap((part) => part.segments)} />
-
-        <div className="flex flex-col gap-1.5">
-          {day.parts.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Sin bloques en el horario despierto.</p>
-          ) : (
-            day.parts.map((part) => <PartRow key={`${day.date}-${part.part}`} part={part} />)
-          )}
-        </div>
+      </CardHeader>
+      <CardContent className={cn("flex flex-col gap-3", loading && "opacity-70")}>
+        {view === "week" ? (
+          <WeekGrid days={paddedWeek} timeZone={timeZone} />
+        ) : (
+          <div className="overflow-x-auto">
+            <div className="min-w-[640px]">
+              <MonthGrid days={monthDays} month={month} />
+            </div>
+          </div>
+        )}
+        <Legend days={legendDays} />
       </CardContent>
     </Card>
   );

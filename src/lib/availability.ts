@@ -3,7 +3,13 @@ import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
 import type { ClassBlock, Item } from "@/db/schema";
 import { parseHm } from "./datetime";
 
-export type Interval = { start: Date; end: Date; title?: string; kind?: string };
+export type Interval = {
+  start: Date;
+  end: Date;
+  title?: string;
+  kind?: string;
+  location?: string | null;
+};
 
 export type FreeSlot = {
   start: Date;
@@ -74,7 +80,9 @@ export function localInterval(
 }
 
 export function expandClassBlocks(
-  blocks: Pick<ClassBlock, "title" | "dayOfWeek" | "startTime" | "endTime">[],
+  blocks: Array<
+    Pick<ClassBlock, "title" | "dayOfWeek" | "startTime" | "endTime"> & { location?: string | null }
+  >,
   from: Date,
   to: Date,
   timeZone: string,
@@ -90,6 +98,7 @@ export function expandClassBlocks(
         ...localInterval(dateStr, block.startTime, block.endTime, timeZone),
         title: block.title,
         kind: "class",
+        location: block.location ?? null,
       });
     }
   }

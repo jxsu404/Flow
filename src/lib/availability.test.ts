@@ -28,8 +28,17 @@ test("expande clases semanales al día ISO correcto", () => {
   );
   assert.equal(intervals.length, 1);
   assert.equal(intervals[0]?.title, "Matemáticas");
+  assert.equal(intervals[0]?.kind, "class");
+  assert.equal(intervals[0]?.location, null);
   assert.equal(intervals[0]?.start.toISOString(), fromZonedTime("2026-08-17T08:00:00", TZ).toISOString());
   assert.equal(intervals[0]?.end.toISOString(), fromZonedTime("2026-08-17T10:00:00", TZ).toISOString());
+  const withRoom = expandClassBlocks(
+    [{ title: "Matemáticas", dayOfWeek: 1, startTime: "08:00", endTime: "10:00", location: "Aula 2" }],
+    monday,
+    tuesday,
+    TZ,
+  );
+  assert.equal(withRoom[0]?.location, "Aula 2");
 });
 
 test("encuentra hueco de 2 horas entre clase y evento", () => {
