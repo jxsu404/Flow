@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Atom,
   BookOpen,
@@ -19,6 +19,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
+  GRID_END_HOUR,
   HOUR_HEIGHT,
   blockLayout,
   busyBlocksFromDay,
@@ -169,12 +170,38 @@ function WeekGrid({
   nowTop: number | null;
 }) {
   const hours = gridHours();
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const weekKey = days.map((day) => day.date).join(",");
+
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const hasToday = days.some((day) => day.isToday);
+    if (!hasToday) {
+      el.scrollTop = 0;
+      return;
+    }
+    const { hour, minute } = clockInZone(timeZone);
+    const top = nowLineTopFromClock(hour, minute);
+    if (top != null) {
+      el.scrollTop = Math.max(0, top - 80);
+    } else if (hour >= GRID_END_HOUR) {
+      el.scrollTop = el.scrollHeight;
+    } else {
+      el.scrollTop = 0;
+    }
+  }, [days, timeZone, weekKey]);
 
   return (
-    <div className="-mx-1 overflow-x-auto pb-1">
-      <div className="min-w-[760px] px-1">
+    <div
+      ref={scrollerRef}
+      tabIndex={0}
+      aria-label="Horario semanal. Usa la barra para ver todas las horas."
+      className="horario-scroll max-h-[min(36rem,70dvh)] overflow-auto overscroll-contain rounded-lg ring-1 ring-border/40"
+    >
+      <div className="min-w-[760px]">
         <div className="grid" style={{ gridTemplateColumns: `3.25rem repeat(${days.length}, minmax(5.5rem, 1fr))` }}>
-          <div />
+          <div className="sticky top-0 left-0 z-30 bg-card" />
           {days.map((day) => {
             const stats = occupancy(day);
             const label = dayColumnLabel(day.date, timeZone);
@@ -182,8 +209,9 @@ function WeekGrid({
               <div
                 key={`head-${day.date}`}
                 className={cn(
-                  "flex flex-col items-center rounded-t-lg px-1 py-2",
-                  day.isToday && "bg-primary/10 ring-1 ring-inset ring-primary/40",
+                  "sticky top-0 z-20 flex flex-col items-center border-b border-border/50 bg-card/95 px-1 py-2 backdrop-blur-sm",
+                  day.isToday &&
+                    "bg-[color-mix(in_oklch,var(--card)_88%,var(--primary))] ring-1 ring-inset ring-primary/40",
                 )}
               >
                 <p className={cn("text-xs font-medium", day.isToday ? "text-primary" : "text-muted-foreground")}>
@@ -200,7 +228,7 @@ function WeekGrid({
               </div>
             );
           })}
-          <div className="flex flex-col">
+          <div className="sticky left-0 z-10 flex flex-col border-r border-border/40 bg-card">
             {hours.map((hour) => (
               <div
                 key={hour}
@@ -229,7 +257,7 @@ function AfterHoursRow({ days }: { days: ScheduleDay[] }) {
       className="mt-2 grid border-t border-dashed border-border/60 pt-2"
       style={{ gridTemplateColumns: `3.25rem repeat(${days.length}, minmax(5.5rem, 1fr))` }}
     >
-      <p className="pr-2 pt-1 text-right text-[11px] leading-tight text-muted-foreground">
+      <p className="sticky left-0 z-10 bg-card pr-2 pt-1 text-right text-[11px] leading-tight text-muted-foreground">
         Fuera del horario
       </p>
       {days.map((day) => {
@@ -318,18 +346,24 @@ function MonthCell({
 function MonthGrid({ days, month }: { days: ScheduleDay[]; month: string }) {
   const labels = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
   return (
-    <div className="flex flex-col gap-2">
-      <div className="grid grid-cols-7 gap-1.5">
-        {labels.map((label) => (
-          <p key={label} className="px-1 text-xs font-medium text-muted-foreground">
-            {label}
-          </p>
-        ))}
-      </div>
-      <div className="grid grid-cols-7 gap-1.5">
-        {days.map((day) => (
-          <MonthCell key={day.date} day={day} inMonth={day.date.startsWith(month)} />
-        ))}
+    <div
+      tabIndex={0}
+      aria-label="Calendario mensual. Usa la barra para desplazarte."
+      className="horario-scroll max-h-[min(36rem,70dvh)] overflow-auto overscroll-contain rounded-lg ring-1 ring-border/40"
+    >
+      <div className="min-w-[640px] p-1.5">
+        <div className="sticky top-0 z-10 grid grid-cols-7 gap-1.5 bg-card pb-2">
+          {labels.map((label) => (
+            <p key={label} className="px-1 text-xs font-medium text-muted-foreground">
+              {label}
+            </p>
+          ))}
+        </div>
+        <div className="grid grid-cols-7 gap-1.5">
+          {days.map((day) => (
+            <MonthCell key={day.date} day={day} inMonth={day.date.startsWith(month)} />
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -516,11 +550,7 @@ export function WeekSchedule({
         {view === "week" ? (
           <WeekGrid days={paddedWeek} timeZone={timeZone} nowTop={nowTop} />
         ) : (
-          <div className="overflow-x-auto">
-            <div className="min-w-[640px]">
-              <MonthGrid days={monthDays} month={month} />
-            </div>
-          </div>
+          <MonthGrid days={monthDays} month={month} />
         )}
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <Legend days={legendDays} />
