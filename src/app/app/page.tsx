@@ -11,9 +11,9 @@ export default async function DashboardPage() {
   const data = await getDashboardData(session.user.id);
 
   return (
-    <div className="flex flex-col gap-8">
-      <CommandBar featured />
+    <div className="flex flex-col gap-6">
       <DashboardView data={data} />
+      <CommandBar />
     </div>
   );
 }
