@@ -9,6 +9,8 @@ import { listClassBlocks } from "./classes";
 import { DEFAULT_TIMEZONE, ISO_DAY_LABELS } from "./datetime";
 import { isCalendarConnected } from "./google-token";
 import { listItems } from "./items";
+import { buildTodayAtmosphere, type TodayAtmosphere } from "./today-atmosphere";
+import { getCurrentWeather } from "./weather";
 
 export type DashboardData = {
   userName: string | null;
@@ -20,6 +22,7 @@ export type DashboardData = {
   priorities: Item[];
   upcoming: Item[];
   freeSlots: FreeSlot[];
+  todayAtmosphere: TodayAtmosphere;
 };
 
 function priorityRank(priority: Item["priority"]) {
@@ -35,11 +38,12 @@ export async function getDashboardData(userId: string): Promise<DashboardData> {
   const now = new Date();
   const rangeEnd = addDays(now, 7);
 
-  const [allItems, classes, calendarConnected, calendarBusy] = await Promise.all([
+  const [allItems, classes, calendarConnected, calendarBusy, weather] = await Promise.all([
     listItems(userId),
     listClassBlocks(userId),
     isCalendarConnected(userId),
     listCalendarBusy(userId, now, rangeEnd).catch(() => []),
+    getCurrentWeather(timeZone),
   ]);
 
   const pending = allItems.filter((item) => item.status === "pending");
@@ -94,5 +98,13 @@ export async function getDashboardData(userId: string): Promise<DashboardData> {
     priorities,
     upcoming,
     freeSlots,
+    todayAtmosphere: buildTodayAtmosphere({
+      now,
+      timeZone,
+      weather,
+      todayItems,
+      priorities,
+      todayClasses,
+    }),
   };
 }

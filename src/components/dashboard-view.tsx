@@ -45,6 +45,14 @@ export function DashboardView({ data }: { data: DashboardData }) {
           <CardTitle>Hoy · {data.todayLabel}</CardTitle>
         </CardHeader>
         <CardContent>
+          <p className="mb-3 max-w-prose border-l-2 border-border pl-3 text-sm leading-relaxed text-muted-foreground">
+            {data.todayAtmosphere.emoji ? (
+              <span aria-hidden className="mr-1.5">
+                {data.todayAtmosphere.emoji}
+              </span>
+            ) : null}
+            {data.todayAtmosphere.line}
+          </p>
           {data.todayClasses.length === 0 && data.todayItems.length === 0 ? (
             <p className="text-sm text-muted-foreground">Nada fijo para hoy. Usa la barra de comando.</p>
           ) : null}
