@@ -43,6 +43,8 @@ function sampleDay(overrides?: Partial<ScheduleDay>): ScheduleDay {
     isToday: true,
     isPast: false,
     summary: "",
+    status: "free",
+    obligations: [],
     parts: [
       {
         part: "Mañana",

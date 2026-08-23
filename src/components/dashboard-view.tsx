@@ -106,17 +106,19 @@ function DayTimeline({ plan }: { plan: DayPlan }) {
   const parts = ["Mañana", "Tarde", "Noche"] as const;
   const insight = dayInsight(plan);
   const occupancy = planOccupancy(plan);
-  const freeLead = occupancy.busyCount === 0 ? plan.summary : insight;
 
   return (
     <div className="flex flex-col gap-3">
-      {freeLead ? (
+      {plan.summary ? (
         <div className="flex items-start gap-1.5 text-sm">
-          {occupancy.busyCount === 0 ? <Sparkles className="mt-0.5 size-4 shrink-0 text-primary/80" /> : null}
+          {plan.status === "free" ? <Sparkles className="mt-0.5 size-4 shrink-0 text-primary/80" /> : null}
           <div>
-            <p className="text-muted-foreground">{freeLead}</p>
-            {occupancy.busyCount === 0 && !occupancy.hasSuggestion ? (
+            <p className="text-muted-foreground">{plan.summary}</p>
+            {plan.status === "free" && !occupancy.hasSuggestion ? (
               <p className="mt-0.5 text-xs text-muted-foreground">Un buen momento para adelantar tareas.</p>
+            ) : null}
+            {plan.status === "partial" && insight ? (
+              <p className="mt-0.5 text-xs text-muted-foreground">{insight}</p>
             ) : null}
           </div>
         </div>

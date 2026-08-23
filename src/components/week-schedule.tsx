@@ -36,6 +36,7 @@ import { clockInZone } from "@/lib/clock";
 import type { ScheduleData } from "@/lib/dashboard";
 import { addCalendarDays, addCalendarMonths, dayColumnLabel } from "@/lib/datetime";
 import type { ScheduleDay } from "@/lib/day-plan";
+import { obligationPhrase } from "@/lib/day-status";
 import { subjectGlyph, subjectTone } from "@/lib/subject-color";
 import { cn } from "@/lib/utils";
 
@@ -121,7 +122,9 @@ function DayBody({
   nowTop: number | null;
 }) {
   const blocks = busyBlocksFromDay(day);
-  const emptyToday = day.isToday && !dayHasBusy(day);
+  const emptyFree = day.isToday && !dayHasBusy(day) && day.status === "free";
+  const emptyDue = day.isToday && !dayHasBusy(day) && day.status === "freeWithDue";
+  const dueNote = obligationPhrase(day.obligations);
 
   return (
     <div
@@ -139,11 +142,17 @@ function DayBody({
         <EventBlock key={`${block.title}-${block.startMin}-${block.kind}`} block={block} />
       ))}
       {day.isToday ? <NowLine top={nowTop} /> : null}
-      {emptyToday ? (
+      {emptyFree ? (
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 px-3 text-center">
           <Sparkles className="size-5 text-primary/80" />
           <p className="text-xs font-medium leading-snug">Tu día está bastante libre.</p>
           <p className="text-xs leading-snug text-muted-foreground">Un buen momento para adelantar tareas.</p>
+        </div>
+      ) : null}
+      {emptyDue && dueNote ? (
+        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-1 px-3 text-center">
+          <p className="text-xs font-medium leading-snug">Libre de clases</p>
+          <p className="text-xs leading-snug text-muted-foreground">Tienes {dueNote}.</p>
         </div>
       ) : null}
     </div>
@@ -206,7 +215,43 @@ function WeekGrid({
             <DayBody key={day.date} day={day} hours={hours} nowTop={nowTop} />
           ))}
         </div>
+        <AfterHoursRow days={days} />
       </div>
+    </div>
+  );
+}
+
+function AfterHoursRow({ days }: { days: ScheduleDay[] }) {
+  const hasAfterHours = days.some((day) => day.obligations.some((item) => item.afterHours));
+  if (!hasAfterHours) return null;
+  return (
+    <div
+      className="mt-2 grid border-t border-dashed border-border/60 pt-2"
+      style={{ gridTemplateColumns: `3.25rem repeat(${days.length}, minmax(5.5rem, 1fr))` }}
+    >
+      <p className="pr-2 pt-1 text-right text-[11px] leading-tight text-muted-foreground">
+        Fuera del horario
+      </p>
+      {days.map((day) => {
+        const items = day.obligations.filter((item) => item.afterHours);
+        return (
+          <div key={`after-${day.date}`} className="min-w-0 border-l border-border/40 px-1 py-1">
+            {items.length === 0 ? (
+              <p className="text-[11px] text-muted-foreground/50">—</p>
+            ) : (
+              items.map((item) => (
+                <div key={item.id} className="rounded-md bg-rose-500/10 px-1.5 py-1">
+                  <p className="font-mono text-[11px] tabular-nums text-rose-300">{item.timeLabel}</p>
+                  <p className="truncate text-xs leading-tight">{item.title}</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    {item.type === "exam" ? "Examen" : item.type === "event" || item.type === "calendar" ? "Evento" : "Entrega"}
+                  </p>
+                </div>
+              ))
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -221,6 +266,7 @@ function MonthCell({
   const blocks = busyBlocksFromDay(day);
   const shown = blocks.slice(0, 3);
   const extra = blocks.length - shown.length;
+  const afterHours = day.obligations.filter((item) => item.afterHours);
   const dateNum = day.date.slice(8).replace(/^0/, "");
 
   return (
@@ -255,6 +301,15 @@ function MonthCell({
           );
         })}
         {extra > 0 ? <p className="text-xs text-muted-foreground">+{extra} más</p> : null}
+        {afterHours.map((item) => (
+          <div
+            key={item.id}
+            className="truncate rounded-md border border-rose-400/30 bg-rose-500/15 px-1.5 py-0.5 text-xs leading-tight text-rose-50"
+            title={`${item.title} · ${item.timeLabel}`}
+          >
+            {item.timeLabel} {item.title}
+          </div>
+        ))}
       </div>
     </div>
   );

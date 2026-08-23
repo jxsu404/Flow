@@ -49,6 +49,7 @@ test("una entrega de mañana no ocupa el sábado, se sugiere en un bloque libre"
   assert.ok(day);
   assert.equal(day.weekday, "Sábado");
   assert.equal(day.segments.every((s) => s.type === "free"), true);
+  assert.equal(day.status, "free");
   assert.match(day.summary, /bastante libre/);
   assert.match(day.summary, /Ensayo de literatura/);
   const morning = day.segments.find((s) => s.type === "free" && s.partLabel === "Mañana");
@@ -116,4 +117,27 @@ test("isFlexibleWork: entregas sin hora sí, eventos con horario no", () => {
     ),
     false,
   );
+});
+
+test("una entrega hoy a las 23:59 no deja el domingo bastante libre", () => {
+  const sunday = fromZonedTime("2026-08-23T16:00:00", TZ);
+  const due = fromZonedTime("2026-08-23T23:59:00", TZ);
+  const days = buildDayPlans({
+    from: fromZonedTime("2026-08-23T00:00:00", TZ),
+    to: fromZonedTime("2026-08-23T23:59:59", TZ),
+    now: sunday,
+    timeZone: TZ,
+    classBlocks: [],
+    items: [makeItem({ id: "conta", title: "Tarea de conta", type: "assignment", dueAt: due })],
+    calendarBusy: [],
+  });
+  const day = days[0];
+  assert.ok(day);
+  assert.equal(day.status, "freeWithDue");
+  assert.match(day.summary, /libre de clases/);
+  assert.match(day.summary, /1 entrega pendiente/);
+  assert.equal(/bastante libre/.test(day.summary), false);
+  assert.equal(day.obligations.length, 1);
+  assert.equal(day.obligations[0]?.afterHours, true);
+  assert.equal(day.obligations[0]?.timeLabel, "23:59");
 });

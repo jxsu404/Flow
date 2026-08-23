@@ -3,8 +3,6 @@ import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
 import { es } from "date-fns/locale";
 import type { ClassBlock, Item } from "@/db/schema";
 import {
-  AWAKE_END,
-  AWAKE_START,
   clipInterval,
   DAY_PARTS,
   eachDateInZone,
@@ -16,6 +14,7 @@ import {
   type Interval,
 } from "./availability";
 import { ISO_DAY_LABELS } from "./datetime";
+import { classifyDay, obligationsOnDate, type DayObligation, type DayStatus } from "./day-status";
 
 export type SuggestedWork = {
   itemId: string;
@@ -50,6 +49,8 @@ export type DayPlan = {
   heading: string;
   isToday: boolean;
   summary: string;
+  status: DayStatus;
+  obligations: DayObligation[];
   segments: DaySegment[];
 };
 
@@ -81,6 +82,8 @@ export type ScheduleDay = {
   isToday: boolean;
   isPast: boolean;
   summary: string;
+  status: DayStatus;
+  obligations: DayObligation[];
   parts: SchedulePart[];
 };
 
@@ -131,6 +134,8 @@ export function toScheduleDays(plans: DayPlan[], today: string, timeZone: string
       isToday: plan.isToday,
       isPast: plan.date < today,
       summary: plan.summary,
+      status: plan.status,
+      obligations: plan.obligations,
       parts,
     };
   });
@@ -200,36 +205,6 @@ function sortFlexible(items: Item[]): Item[] {
     if (b.type === "assignment" && a.type !== "assignment") return 1;
     return a.title.localeCompare(b.title, "es");
   });
-}
-
-function daySummary(plan: Pick<DayPlan, "segments" | "isToday">): string {
-  const busy = plan.segments.filter((s) => s.type === "busy");
-  const free = plan.segments.filter((s) => s.type === "free");
-  const suggestion = free.find((s) => s.type === "free" && s.suggestion)?.suggestion;
-
-  if (busy.length === 0 && free.length === 0) {
-    return plan.isToday
-      ? "Ya pasó el horario despierto. De 22:00 a 07:00 cuenta como descanso."
-      : "Sin bloques en el horario despierto.";
-  }
-  if (busy.length === 0) {
-    if (suggestion) {
-      return plan.isToday
-        ? `Tu día está bastante libre. Puedes usar este tiempo para ${suggestion.title} (${suggestion.dueLabel}).`
-        : `Nada fijo. Puedes usar este tiempo para ${suggestion.title} (${suggestion.dueLabel}).`;
-    }
-    return plan.isToday
-      ? "Tu día está bastante libre."
-      : `Nada fijo. Bloques libres entre ${AWAKE_START} y ${AWAKE_END}.`;
-  }
-  const classCount = busy.filter((s) => s.type === "busy" && s.kind === "class").length;
-  const otherCount = busy.length - classCount;
-  const bits: string[] = [];
-  if (classCount) bits.push(`${classCount} ${classCount === 1 ? "clase" : "clases"}`);
-  if (otherCount) bits.push(`${otherCount} ${otherCount === 1 ? "actividad" : "actividades"}`);
-  if (free.length) bits.push(`${free.length} ${free.length === 1 ? "bloque libre" : "bloques libres"}`);
-  if (suggestion) bits.push(`sugerencia: ${suggestion.title}`);
-  return bits.join(" · ");
 }
 
 export function dayInsight(plan: Pick<DayPlan, "segments">): string | null {
@@ -346,6 +321,8 @@ export function buildDayPlans(input: {
       heading: `${weekday} ${formatInTimeZone(noon, input.timeZone, "d MMM")}`,
       isToday: date === today,
       summary: "",
+      status: "free",
+      obligations: obligationsOnDate(input.items, input.calendarBusy, date, input.timeZone),
       segments: [...occupied, ...free].sort((a, b) => a.start.getTime() - b.start.getTime()),
     };
     days.push(plan);
@@ -353,7 +330,18 @@ export function buildDayPlans(input: {
 
   assignSuggestions(days, input.items, input.timeZone, today);
   for (const day of days) {
-    day.summary = daySummary(day);
+    const busy = day.segments.filter((segment) => segment.type === "busy");
+    const freeSegs = day.segments.filter((segment) => segment.type === "free");
+    const suggestion = freeSegs.find((segment) => segment.suggestion)?.suggestion ?? null;
+    const classified = classifyDay({
+      busy,
+      free: freeSegs,
+      obligations: day.obligations,
+      isToday: day.isToday,
+      suggestion,
+    });
+    day.status = classified.status;
+    day.summary = classified.summary;
   }
   return days;
 }
