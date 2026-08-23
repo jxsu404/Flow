@@ -59,6 +59,7 @@ export type ScheduleSegment = {
   kind?: string;
   suggestionTitle?: string | null;
   suggestionDue?: string | null;
+  suggestionType?: SuggestedWork["type"] | null;
   startMin: number;
   durationMin: number;
 };
@@ -103,6 +104,7 @@ export function toScheduleDays(plans: DayPlan[], today: string, timeZone: string
             kind: segment.type === "busy" ? segment.kind : undefined,
             suggestionTitle: segment.type === "free" ? segment.suggestion?.title ?? null : null,
             suggestionDue: segment.type === "free" ? segment.suggestion?.dueLabel ?? null : null,
+            suggestionType: segment.type === "free" ? segment.suggestion?.type ?? null : null,
             startMin,
             durationMin: Math.max(1, endMin - startMin),
           };
@@ -209,9 +211,13 @@ function daySummary(plan: Pick<DayPlan, "segments" | "isToday">): string {
   }
   if (busy.length === 0) {
     if (suggestion) {
-      return `Nada fijo. Puedes usar este tiempo para ${suggestion.title} (${suggestion.dueLabel}).`;
+      return plan.isToday
+        ? `Tu día está bastante libre. Puedes usar este tiempo para ${suggestion.title} (${suggestion.dueLabel}).`
+        : `Nada fijo. Puedes usar este tiempo para ${suggestion.title} (${suggestion.dueLabel}).`;
     }
-    return `Nada fijo. Bloques libres entre ${AWAKE_START} y ${AWAKE_END}.`;
+    return plan.isToday
+      ? "Tu día está bastante libre."
+      : `Nada fijo. Bloques libres entre ${AWAKE_START} y ${AWAKE_END}.`;
   }
   const classCount = busy.filter((s) => s.type === "busy" && s.kind === "class").length;
   const otherCount = busy.length - classCount;
@@ -221,6 +227,24 @@ function daySummary(plan: Pick<DayPlan, "segments" | "isToday">): string {
   if (free.length) bits.push(`${free.length} ${free.length === 1 ? "bloque libre" : "bloques libres"}`);
   if (suggestion) bits.push(`sugerencia: ${suggestion.title}`);
   return bits.join(" · ");
+}
+
+export function dayInsight(plan: Pick<DayPlan, "segments">): string | null {
+  const busy = plan.segments.filter((segment) => segment.type === "busy");
+  if (busy.length === 0) return null;
+  for (const part of ["Mañana", "Tarde", "Noche"] as const) {
+    const segs = plan.segments.filter((segment) => segment.partLabel === part);
+    if (segs.length === 0) continue;
+    if (segs.every((segment) => segment.type === "free")) {
+      return `Tienes tiempo disponible esta ${part.toLowerCase()}.`;
+    }
+  }
+  return null;
+}
+
+export function suggestionPrompt(suggestion: SuggestedWork): string {
+  const verb = suggestion.type === "assignment" ? "adelantar" : "avanzar";
+  return `Puedes usar este tiempo para ${verb} ${suggestion.title}.`;
 }
 
 function assignSuggestions(days: DayPlan[], items: Item[], timeZone: string, today: string): void {

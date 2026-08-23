@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { fromZonedTime } from "date-fns-tz";
 import type { Item } from "../db/schema";
-import { buildDayPlans, isFlexibleWork } from "./day-plan";
+import { buildDayPlans, dayInsight, isFlexibleWork } from "./day-plan";
 
 const TZ = "America/Costa_Rica";
 
@@ -49,7 +49,7 @@ test("una entrega de mañana no ocupa el sábado, se sugiere en un bloque libre"
   assert.ok(day);
   assert.equal(day.weekday, "Sábado");
   assert.equal(day.segments.every((s) => s.type === "free"), true);
-  assert.match(day.summary, /Nada fijo/);
+  assert.match(day.summary, /bastante libre/);
   assert.match(day.summary, /Ensayo de literatura/);
   const morning = day.segments.find((s) => s.type === "free" && s.partLabel === "Mañana");
   assert.ok(morning && morning.type === "free");
@@ -80,6 +80,21 @@ test("las clases aparecen como ocupadas y parten los bloques libres", () => {
   );
   assert.ok(before);
   assert.ok(after);
+});
+
+test("si la mañana tiene clase y la tarde está libre, lo dice", () => {
+  const monday = fromZonedTime("2026-08-17T07:00:00", TZ);
+  const days = buildDayPlans({
+    from: monday,
+    to: fromZonedTime("2026-08-17T23:59:59", TZ),
+    timeZone: TZ,
+    classBlocks: [{ title: "Matemáticas", dayOfWeek: 1, startTime: "08:00", endTime: "10:00" }],
+    items: [],
+    calendarBusy: [],
+  });
+  const day = days[0];
+  assert.ok(day);
+  assert.equal(dayInsight(day), "Tienes tiempo disponible esta tarde.");
 });
 
 test("isFlexibleWork: entregas sin hora sí, eventos con horario no", () => {

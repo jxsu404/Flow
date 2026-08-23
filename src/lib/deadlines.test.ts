@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { fromZonedTime } from "date-fns-tz";
-import { activityKind, urgencyForDue } from "./deadlines";
+import { activityKind, dueCaption, urgencyForDue } from "./deadlines";
 
 const TZ = "America/Costa_Rica";
 const TODAY = "2026-08-22";
@@ -26,4 +26,13 @@ test("tipo: examen, proyecto y tarea salen de los datos", () => {
   assert.equal(activityKind({ type: "task", title: "Tarea de conta" }), "tarea");
   assert.equal(activityKind({ type: "assignment", title: "Trabajo de literatura" }), "trabajo");
   assert.equal(activityKind({ type: "assignment", title: "Ensayo" }), "entrega");
+});
+
+test("el pie de deadline prioriza el vencimiento, sin dos puntos de más", () => {
+  const todayDue = fromZonedTime("2026-08-22T23:59:00", TZ);
+  const urgency = urgencyForDue(todayDue, TODAY, TZ);
+  assert.equal(dueCaption({ type: "assignment", dueAt: todayDue }, urgency), "Entrega hoy");
+  const exam = fromZonedTime("2026-08-23T08:00:00", TZ);
+  const examUrgency = urgencyForDue(exam, TODAY, TZ);
+  assert.equal(dueCaption({ type: "exam", dueAt: exam }, examUrgency), "Examen mañana");
 });

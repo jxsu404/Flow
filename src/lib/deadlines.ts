@@ -37,6 +37,15 @@ export const KIND_LABEL: Record<ActivityKind, string> = {
   evento: "EVENTO",
 };
 
+export const KIND_BADGE_CLASS: Record<ActivityKind, string> = {
+  tarea: "",
+  examen: "border-transparent bg-orange-500/15 text-orange-800 dark:text-orange-300",
+  proyecto: "",
+  trabajo: "",
+  entrega: "",
+  evento: "",
+};
+
 export function daysUntilDue(dueAt: Date, today: string, timeZone: string): number {
   const due = formatInTimeZone(dueAt, timeZone, "yyyy-MM-dd");
   const dueNoon = fromZonedTime(`${due}T12:00:00`, timeZone);
@@ -57,8 +66,8 @@ export function urgencyForDue(dueAt: Date | null, today: string, timeZone: strin
 export function dueCaption(item: Pick<Item, "type" | "dueAt">, urgency: Urgency | null): string {
   if (!urgency) return "Sin fecha";
   const noun = item.type === "exam" ? "Examen" : "Entrega";
-  if (urgency.daysLeft < 0) return `${noun}: vencida`;
-  if (urgency.daysLeft === 0) return `${noun}: hoy`;
-  if (urgency.daysLeft === 1) return `${noun}: mañana`;
-  return `${noun}: en ${urgency.daysLeft} días`;
+  if (urgency.daysLeft < 0) return `${noun} vencida`;
+  if (urgency.daysLeft === 0) return `${noun} hoy`;
+  if (urgency.daysLeft === 1) return `${noun} mañana`;
+  return `${noun} en ${urgency.daysLeft} días`;
 }

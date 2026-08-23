@@ -6,6 +6,7 @@ import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 
 type SpeechRec = {
   lang: string;
@@ -27,7 +28,7 @@ function getSpeechRecognition(): (new () => SpeechRec) | null {
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
 }
 
-export function CommandBar() {
+export function CommandBar({ featured = false }: { featured?: boolean }) {
   const router = useRouter();
   const [text, setText] = useState("");
   const [listening, setListening] = useState(false);
@@ -104,8 +105,25 @@ export function CommandBar() {
     recognition.start();
   }
 
+  const status = listening
+    ? "Escuchando… habla con naturalidad."
+    : lastMessage;
+
   return (
-    <section className="rounded-2xl border border-border/80 bg-card/80 p-4 shadow-sm">
+    <section
+      className={cn(
+        "rounded-2xl border border-border/80 bg-card/80 shadow-sm",
+        featured ? "p-5 md:p-6" : "p-4",
+      )}
+    >
+      {featured ? (
+        <div className="mb-4">
+          <h1 className="text-2xl font-semibold tracking-tight">¿Qué tienes pendiente?</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Escribe lo que necesitas hacer. Flow organiza y sincroniza todo por ti.
+          </p>
+        </div>
+      ) : null}
       <form
         className="flex flex-col gap-3 sm:flex-row sm:items-center"
         onSubmit={(event) => {
@@ -130,19 +148,19 @@ export function CommandBar() {
             textRef.current = event.target.value;
             setText(event.target.value);
           }}
-          placeholder='Prueba: “Tengo que entregar el proyecto de programación el jueves a las 5.”'
-          className="h-11 flex-1"
+          placeholder="Tengo que entregar el proyecto de programación el jueves a las 5..."
+          className={cn("flex-1", featured ? "h-12 text-base md:text-base" : "h-11")}
           disabled={pending}
         />
-        <Button type="submit" className="h-11 px-5" disabled={pending || !text.trim()}>
+        <Button type="submit" className={cn("px-5", featured ? "h-12" : "h-11")} disabled={pending || !text.trim()}>
           {pending ? "Organizando…" : "Enviar"}
         </Button>
       </form>
-      <p className="mt-3 text-sm text-muted-foreground">
-        {listening
-          ? "Escuchando… habla con naturalidad."
-          : lastMessage ?? "Habla o escribe. Flow entiende, organiza y sincroniza."}
-      </p>
+      {status || !featured ? (
+        <p className="mt-3 text-sm text-muted-foreground">
+          {status ?? "Habla o escribe. Flow entiende, organiza y sincroniza."}
+        </p>
+      ) : null}
     </section>
   );
 }

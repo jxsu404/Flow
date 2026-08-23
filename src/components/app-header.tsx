@@ -25,7 +25,7 @@ export function AppHeader({ name }: { name?: string | null }) {
             <Link
               key={link.href}
               href={link.href}
-              className={pathname === link.href ? "text-foreground" : "hover:text-foreground"}
+              className={pathname === link.href ? "text-primary" : "hover:text-foreground"}
             >
               {link.label}
             </Link>
