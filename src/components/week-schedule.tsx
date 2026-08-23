@@ -1,10 +1,14 @@
 "use client";
 
-import { useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { useRef, useState } from "react";
+import { ChevronDown, FileDown, ImageDown } from "lucide-react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { ScheduleExportSheet } from "@/components/schedule-export-sheet";
 import type { ScheduleDay, SchedulePart, ScheduleSegment } from "@/lib/day-plan";
+import { saveSchedulePdf, saveSchedulePng } from "@/lib/schedule-export";
 import { cn } from "@/lib/utils";
 
 const busyKindLabel: Record<string, string> = {
@@ -117,7 +121,27 @@ function PartAccordion({ part, defaultOpen }: { part: SchedulePart; defaultOpen:
 export function WeekSchedule({ days }: { days: ScheduleDay[] }) {
   const today = days.find((day) => day.isToday) ?? days[0];
   const [selected, setSelected] = useState(today?.date ?? days[0]?.date ?? "");
+  const [exporting, setExporting] = useState<"png" | "pdf" | null>(null);
+  const exportRef = useRef<HTMLDivElement>(null);
   const day = days.find((item) => item.date === selected) ?? today;
+
+  async function exportSchedule(kind: "png" | "pdf") {
+    const node = exportRef.current;
+    if (!node) {
+      toast.error("No pude preparar el horario para exportar.");
+      return;
+    }
+    setExporting(kind);
+    try {
+      if (kind === "png") await saveSchedulePng(node, days);
+      else await saveSchedulePdf(node, days);
+      toast.success(kind === "png" ? "Imagen descargada." : "PDF descargado.");
+    } catch {
+      toast.error("No pude exportar el horario. Inténtalo de nuevo.");
+    } finally {
+      setExporting(null);
+    }
+  }
 
   if (!day) {
     return (
@@ -137,8 +161,32 @@ export function WeekSchedule({ days }: { days: ScheduleDay[] }) {
       <CardHeader>
         <CardTitle>Horario</CardTitle>
         <CardDescription>
-          Elige un día. Mañana, tarde y noche se despliegan. La barra es tu línea de tiempo (07:00–22:00).
+          Elige un día. Mañana, tarde y noche se despliegan. Exporta la semana completa como imagen o PDF.
         </CardDescription>
+        <CardAction className="flex gap-1">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            aria-label="Exportar horario como imagen"
+            disabled={exporting !== null}
+            onClick={() => void exportSchedule("png")}
+          >
+            <ImageDown />
+            {exporting === "png" ? "Preparando…" : "Imagen"}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            aria-label="Exportar horario como PDF"
+            disabled={exporting !== null}
+            onClick={() => void exportSchedule("pdf")}
+          >
+            <FileDown />
+            {exporting === "pdf" ? "Preparando…" : "PDF"}
+          </Button>
+        </CardAction>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <div className="grid grid-cols-7 gap-1">
@@ -193,6 +241,7 @@ export function WeekSchedule({ days }: { days: ScheduleDay[] }) {
           )}
         </div>
       </CardContent>
+      <ScheduleExportSheet days={days} captureRef={exportRef} />
     </Card>
   );
 }
