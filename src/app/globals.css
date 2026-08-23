@@ -131,6 +131,7 @@
 
 /* Visible scrollbar for the week/month schedule grid. */
 .horario-scroll {
+  max-width: 100%;
   scrollbar-gutter: stable;
   scrollbar-width: thin;
   scrollbar-color: color-mix(in oklch, var(--primary) 75%, var(--muted-foreground))

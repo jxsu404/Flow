@@ -197,7 +197,7 @@ function WeekGrid({
       ref={scrollerRef}
       tabIndex={0}
       aria-label="Horario semanal. Usa la barra para ver todas las horas."
-      className="horario-scroll max-h-[min(36rem,70dvh)] overflow-auto overscroll-contain rounded-lg ring-1 ring-border/40"
+      className="horario-scroll max-h-[min(36rem,70dvh)] min-w-0 w-full overflow-auto overscroll-contain rounded-lg ring-1 ring-border/40"
     >
       <div className="min-w-[760px]">
         <div className="grid" style={{ gridTemplateColumns: `3.25rem repeat(${days.length}, minmax(5.5rem, 1fr))` }}>
@@ -349,7 +349,7 @@ function MonthGrid({ days, month }: { days: ScheduleDay[]; month: string }) {
     <div
       tabIndex={0}
       aria-label="Calendario mensual. Usa la barra para desplazarte."
-      className="horario-scroll max-h-[min(36rem,70dvh)] overflow-auto overscroll-contain rounded-lg ring-1 ring-border/40"
+      className="horario-scroll max-h-[min(36rem,70dvh)] min-w-0 w-full overflow-auto overscroll-contain rounded-lg ring-1 ring-border/40"
     >
       <div className="min-w-[640px] p-1.5">
         <div className="sticky top-0 z-10 grid grid-cols-7 gap-1.5 bg-card pb-2">
@@ -476,7 +476,7 @@ export function WeekSchedule({
   }
 
   return (
-    <Card>
+    <Card className="min-w-0 w-full overflow-hidden">
       <CardHeader className="gap-3 sm:grid-cols-[1fr_auto]">
         <div>
           <CardTitle className="flex items-center gap-2 text-[17px]">
@@ -546,7 +546,7 @@ export function WeekSchedule({
           </div>
         </div>
       </CardHeader>
-      <CardContent className={cn("flex flex-col gap-3", loading && "opacity-70")}>
+      <CardContent className={cn("min-w-0 flex flex-col gap-3", loading && "opacity-70")}>
         {view === "week" ? (
           <WeekGrid days={paddedWeek} timeZone={timeZone} nowTop={nowTop} />
         ) : (
