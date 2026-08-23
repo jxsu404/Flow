@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { headers } from "next/headers";
 
 /** Clima actual. Si no hay datos, Flow no menciona el clima en ningún lado. */
@@ -130,6 +131,7 @@ export async function fetchWeatherNow(place: WeatherPlace): Promise<WeatherNow |
   url.searchParams.set("longitude", place.longitude.toFixed(3));
   url.searchParams.set("current", "temperature_2m,weather_code,is_day");
   url.searchParams.set("timezone", "auto");
+  url.searchParams.set("forecast_days", "1");
 
   try {
     const response = await fetch(url, {
@@ -154,8 +156,9 @@ export async function fetchWeatherNow(place: WeatherPlace): Promise<WeatherNow |
   }
 }
 
-export async function getWeatherNow(timeZone: string): Promise<WeatherNow | null> {
+/** Deduplicado por request; la respuesta HTTP se cachea 15 minutos. */
+export const getWeatherNow = cache(async (timeZone: string): Promise<WeatherNow | null> => {
   const place = await resolveWeatherPlace(timeZone);
   if (!place) return null;
   return fetchWeatherNow(place);
-}
+});
