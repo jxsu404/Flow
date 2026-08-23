@@ -1,9 +1,10 @@
 import type { ActivityKind } from "./deadlines";
 import type { InsightSituation, TodayPart } from "./today-insight";
+import type { WeatherCondition } from "./weather";
 
 /** Optional weather. Omit entirely when Flow has no forecast — never invent rain, sun, or temperature. */
 export type WeatherHint = {
-  condition: "rain" | "clear" | "clouds" | "storm";
+  condition: WeatherCondition;
   temperatureC?: number;
 };
 
@@ -81,6 +82,12 @@ function isWorkKind(kind: ActivityKind | null): boolean {
   return kind === "tarea" || kind === "entrega" || kind === "proyecto" || kind === "trabajo" || kind == null;
 }
 
+function quietAdj(facts: PhraseFacts): string {
+  return facts.weather?.condition === "rain" || facts.weather?.condition === "storm"
+    ? "lluviosa"
+    : "tranquila";
+}
+
 function weekendLead(weekday: string): string | null {
   if (weekday === "Sábado" || weekday === "Domingo") return `Es ${weekday.toLowerCase()}`;
   return null;
@@ -88,6 +95,12 @@ function weekendLead(weekday: string): string | null {
 
 export function phraseSeed(facts: PhraseFacts): string {
   return [facts.today, String(facts.hour), facts.situation, facts.title, facts.part.id].join("|");
+}
+
+export function greetingFor(part: TodayPart): string {
+  if (part.id === "morning") return "Buenos días";
+  if (part.id === "afternoon") return "Buenas tardes";
+  return "Buenas noches";
 }
 
 function weatherMood(part: TodayPart, weather: WeatherHint | null, quiet: boolean): string[] {
@@ -102,7 +115,9 @@ function weatherMood(part: TodayPart, weather: WeatherHint | null, quiet: boolea
       : [`Una ${name} lluviosa${temp}`];
   }
   if (weather?.condition === "clear" && quiet) {
-    return [`Una ${name} despejada y tranquila${temp}`];
+    return part.id === "evening"
+      ? [`Una ${name} despejada y tranquila${temp}`]
+      : [`Una ${name} soleada y tranquila${temp}`, `Una ${name} despejada${temp}`];
   }
   if (quiet) {
     return [`Una ${name} tranquila`, `La ${name} está tranquila`, `Tienes una ${name} bastante libre`];
@@ -207,6 +222,13 @@ export function phraseOptions(facts: PhraseFacts): string[] {
           if (left && (facts.minutesLeft ?? 0) >= 120) {
             lines.push(`Después de ${classes} todavía tienes tiempo para ${title}.`);
           }
+          if (mood[0]) {
+            return [
+              `${mood[0]}. Después de ${classes} puedes avanzar en ${title}.`,
+              `${mood[0]} con ${classes}. Aún así puedes adelantar ${title}.`,
+              ...lines.slice(0, 1),
+            ];
+          }
           return lines;
         }
         const timed = [`Aún tienes tiempo para entregar ${title} hoy.`];
@@ -219,15 +241,19 @@ export function phraseOptions(facts: PhraseFacts): string[] {
         if (weekend) {
           timed.push(`${weekend}. Aún tienes tiempo para entregar ${title} hoy.`);
         }
-        if (facts.part.id === "evening") {
-          return [
-            `La noche está tranquila. Puedes aprovechar para dejar ${title} lista.`,
-            `Ya es de noche y ${title} sigue pendiente. Buen momento para cerrarla.`,
-            ...(rainy(facts.weather) ? mood.map((lead) => attachTitle(lead, title, facts)) : []),
-            ...timed,
-          ];
+        const enriched = mood.map((lead) => attachTitle(lead, title, facts));
+        const night =
+          facts.part.id === "evening"
+            ? [
+                `La noche está ${quietAdj(facts)}. Puedes aprovechar para dejar ${title} lista.`,
+                `Ya es de noche y ${title} sigue pendiente. Buen momento para cerrarla.`,
+              ]
+            : [];
+        // Con clima real, las variantes que lo mencionan van primero: el dato existe y aporta contexto.
+        if (facts.weather && enriched.length) {
+          return [...enriched, ...night.slice(0, 1), timed[0]!];
         }
-        return [...mood.map((lead) => attachTitle(lead, title, facts)), ...timed];
+        return [...night, ...enriched, ...timed];
       }
       case "next_block":
         if (!title) return ["Tienes algo en unos minutos."];
@@ -285,8 +311,15 @@ export function phraseOptions(facts: PhraseFacts): string[] {
           `No tienes pendientes importantes ahora. Disfruta ${restOfPart(facts.part)}.`,
           `Tu ${name} está tranquila. Nada urgente por ahora.`,
         ];
-        if (mood.length && rainy(facts.weather)) {
-          return mood.map((lead) => `${lead}. Nada urgente por ahora.`);
+        if (mood.length && facts.weather) {
+          const lines = mood.map((lead) => `${lead}. Nada urgente por ahora.`);
+          if (facts.weather.condition === "clear" && facts.part.id !== "evening") {
+            lines.push(`Una ${name} soleada para empezar con calma.`);
+          }
+          if (rainy(facts.weather)) {
+            lines.push(`${mood[0]}. Buen momento para tomarte ${restOfPart(facts.part)} con calma.`);
+          }
+          return lines;
         }
         if (weekend) {
           return [`${weekend}. Disfruta ${restOfPart(facts.part)}.`, ...enjoy];

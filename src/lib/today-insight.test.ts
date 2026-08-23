@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { fromZonedTime } from "date-fns-tz";
 import type { Item } from "../db/schema";
-import { interpretToday, resolveDayPart } from "./today-insight";
-import { composeTodayPhrase, phraseOptions, type PhraseFacts } from "./today-phrase";
+import { INSIGHT_STATUS, interpretToday, resolveDayPart } from "./today-insight";
+import { composeTodayPhrase, greetingFor, phraseOptions, type PhraseFacts } from "./today-phrase";
 
 const TZ = "America/Costa_Rica";
 
@@ -299,6 +299,60 @@ test("un examen no se describe como entrega", () => {
 test("la tarde lluviosa enriquece la tarea, no la sustituye", () => {
   const options = phraseOptions(dueFacts({ weather: { condition: "rain" } }));
   assert.ok(options.some((line) => /lluvi/i.test(line) && /conta/i.test(line) && /noche/i.test(line)));
+});
+
+test("la conclusión corta acompaña a la frase", () => {
+  const pending = interpretToday({
+    now: at("2026-08-23T16:00:00"),
+    timeZone: TZ,
+    items: [CONTA],
+    busy: [],
+  });
+  assert.equal(pending.statusLabel, INSIGHT_STATUS.due_today);
+  assert.match(pending.statusLabel, /entrega pendiente/i);
+
+  const calm = interpretToday({ now: at("2026-08-23T16:00:00"), timeZone: TZ, items: [], busy: [] });
+  assert.match(calm.statusLabel, /libre/i);
+});
+
+test("el clima real enriquece la frase según el periodo", () => {
+  const rainy = interpretToday({
+    now: at("2026-08-23T16:00:00"),
+    timeZone: TZ,
+    items: [CONTA],
+    busy: [],
+    weather: { condition: "rain" },
+  });
+  assert.match(text(rainy), /conta/i);
+  assert.match(text(rainy), /lluvi/i);
+
+  const sunny = interpretToday({
+    now: at("2026-08-23T09:00:00"),
+    timeZone: TZ,
+    items: [],
+    busy: [],
+    weather: { condition: "clear" },
+  });
+  assert.match(text(sunny), /soleada|despejada/i);
+  assert.equal(/lluvi/i.test(text(sunny)), false);
+});
+
+test("una obligación urgente no queda tapada por el clima", () => {
+  const insight = interpretToday({
+    now: at("2026-08-23T21:30:00"),
+    timeZone: TZ,
+    items: [CONTA],
+    busy: [],
+    weather: { condition: "clear", temperatureC: 21 },
+  });
+  assert.equal(insight.situation, "soon");
+  assert.match(text(insight), /conta/i);
+});
+
+test("el saludo sigue al periodo del día", () => {
+  assert.equal(greetingFor(resolveDayPart(at("2026-08-23T09:00:00"), TZ)), "Buenos días");
+  assert.equal(greetingFor(resolveDayPart(at("2026-08-23T16:00:00"), TZ)), "Buenas tardes");
+  assert.equal(greetingFor(resolveDayPart(at("2026-08-23T20:00:00"), TZ)), "Buenas noches");
 });
 
 test("las horas distintas cambian la variante sin cambiar el sentido", () => {

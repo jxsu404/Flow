@@ -47,10 +47,25 @@ export type TodayPart = {
 export type TodayInsight = {
   tone: InsightTone;
   situation: InsightSituation;
+  statusLabel: string;
   headline: string;
   detail: string;
   subject: InsightSubject | null;
   part: TodayPart;
+};
+
+/** Conclusión corta que acompaña a la frase. Es la lectura de Flow, no un dato. */
+export const INSIGHT_STATUS: Record<InsightSituation, string> = {
+  overdue: "Tienes una entrega vencida",
+  imminent: "Deberías terminarla ahora",
+  soon: "No lo dejes para después",
+  exam_today: "Tienes un examen hoy",
+  due_today: "Tienes una entrega pendiente",
+  next_block: "Empieza en unos minutos",
+  busy: "Tienes clases programadas",
+  later: "Nada vence hoy",
+  cleared: "Nada urgente ahora",
+  free: "Tu día está libre",
 };
 
 export type InsightItem = Pick<Item, "id" | "title" | "type" | "status" | "dueAt" | "startAt">;
@@ -395,6 +410,7 @@ export function interpretToday(input: {
   return {
     tone: composed.tone,
     situation: chosen.situation,
+    statusLabel: INSIGHT_STATUS[chosen.situation],
     headline: composed.headline,
     detail: composed.detail,
     subject: composed.subject,

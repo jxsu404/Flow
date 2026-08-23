@@ -1,4 +1,5 @@
 import { getISODay } from "date-fns";
+import { es } from "date-fns/locale";
 import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
 import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
@@ -17,6 +18,7 @@ import {
 } from "./datetime";
 import { isCalendarConnected } from "./google-token";
 import { listItems } from "./items";
+import { getWeatherNow, type WeatherNow } from "./weather";
 
 export type ScheduleData = {
   today: string;
@@ -32,6 +34,8 @@ export type DashboardData = ScheduleData & {
   userName: string | null;
   calendarConnected: boolean;
   todayLabel: string;
+  todayLongLabel: string;
+  weather: WeatherNow | null;
   todayClasses: Array<ClassBlock & { when: string }>;
   todayItems: Item[];
   pendingItems: Item[];
@@ -102,11 +106,12 @@ export async function getDashboardData(userId: string): Promise<DashboardData> {
   const to = week.end > month.end ? week.end : month.end;
   const isoDay = getISODay(fromZonedTime(`${todayStr}T12:00:00`, timeZone));
 
-  const [allItems, classes, calendarConnected, calendarBusy] = await Promise.all([
+  const [allItems, classes, calendarConnected, calendarBusy, weather] = await Promise.all([
     listItems(userId),
     listClassBlocks(userId),
     isCalendarConnected(userId),
     listCalendarBusy(userId, from, to).catch(() => []),
+    getWeatherNow(timeZone).catch(() => null),
   ]);
 
   const pending = allItems.filter((item) => item.status === "pending");
@@ -149,6 +154,8 @@ export async function getDashboardData(userId: string): Promise<DashboardData> {
     today: todayStr,
     calendarConnected,
     todayLabel: `${ISO_DAY_LABELS[isoDay] ?? ""} ${formatInTimeZone(now, timeZone, "d")}`.trim(),
+    todayLongLabel: `${ISO_DAY_LABELS[isoDay] ?? ""}, ${formatInTimeZone(now, timeZone, "d 'de' MMMM", { locale: es })}`,
+    weather,
     todayClasses,
     todayItems,
     pendingItems: pending,
